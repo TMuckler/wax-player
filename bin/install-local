@@ -1,0 +1,54 @@
+#!/usr/bin/python3
+"""Validate, copy and enable this checkout as a local Omarchy plugin."""
+import datetime
+import os
+from pathlib import Path
+import shutil
+import subprocess
+import tempfile
+import sys
+
+root = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(root))
+from backend.migrate import migrate, OLD_ID
+
+plugin_id = "local.wax.player"
+plugins = Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config")) / "omarchy/plugins"
+target = plugins / plugin_id
+omarchy = "/usr/bin/omarchy"
+shell = Path(os.environ.get("OMARCHY_PATH", "/usr/share/omarchy")) / "bin/omarchy-shell"
+if not Path(omarchy).exists():
+    raise SystemExit("Omarchy is required to install this plugin")
+if root == target.resolve():
+    raise SystemExit("Run this installer from the source checkout, not the installed copy")
+subprocess.run([omarchy, "plugin", "validate", str(root)], check=True)
+plugins.mkdir(parents=True, exist_ok=True)
+with tempfile.TemporaryDirectory(prefix="wax-install-") as tmp:
+    stage = Path(tmp) / plugin_id
+    stage.mkdir()
+    for name in ("BarWidget.qml", "Panel.qml", "Service.qml", "manifest.json", "LICENSE", "README.md", "CHANGELOG.md"):
+        shutil.copy2(root / name, stage / name)
+    for name in ("backend", "bin", "lib", "views", "docs"):
+        shutil.copytree(root / name, stage / name, ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
+    subprocess.run([omarchy, "plugin", "validate", str(stage)], check=True)
+    if target.exists():
+        backup_root = Path(os.environ.get("XDG_STATE_HOME", Path.home() / ".local/state")) / plugin_id / "install-backups"
+        backup_root.mkdir(parents=True, exist_ok=True)
+        backup = backup_root / datetime.datetime.now().strftime("%Y%m%d-%H%M%S-%f")
+        shutil.copytree(target, backup)
+        # Refresh only known runtime files; preserve unrelated local files.
+        print("Previous installation backed up to", backup)
+    shutil.copytree(stage, target, dirs_exist_ok=True)
+# Stop the old fork before taking its final persisted queue snapshot.
+if (plugins / OLD_ID).exists():
+    subprocess.run([omarchy, "plugin", "disable", OLD_ID], check=True)
+    unit = OLD_ID + "-bridge.service"
+    active = subprocess.run(["/usr/bin/systemctl", "--user", "is-active", "--quiet", unit])
+    if active.returncode == 0:
+        subprocess.run(["/usr/bin/systemctl", "--user", "stop", unit], check=True)
+migration = migrate(plugins.parent.parent, Path(os.environ.get("XDG_STATE_HOME", Path.home() / ".local/state")))
+if migration == "invalid-connection":
+    print("The old connection file is invalid and was left untouched. Connect to your server in Wax Player.")
+subprocess.run([str(shell), "shell", "rescanPlugins"], check=True)
+subprocess.run([omarchy, "plugin", "enable", plugin_id], check=True)
+print("Installed Wax Player. Open its panel to connect to your server.")

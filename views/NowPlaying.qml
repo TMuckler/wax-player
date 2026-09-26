@@ -13,7 +13,7 @@ Column {
   readonly property color fg: bar ? bar.foreground : Color.foreground
   readonly property string family: bar ? bar.fontFamily : Style.font.family
   readonly property bool hasTrack: svc ? svc.hasTrack : false
-  // Width kept free at the top right (the panel puts Solfa's name there).
+  // Width kept free at the top right (the panel puts Wax's name there).
   property real reserveRight: 0
 
   spacing: Style.space(10)

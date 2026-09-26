@@ -17,7 +17,7 @@ Item {
   property var queue: null
   property string error: ""
   // The song J/K just moved: the cursor follows it once the queue reloads.
-  property string follow: ""
+  property int followIndex: -1
   readonly property var rows: Model.queueRows(queue)
   property alias cursor: list.cursor
   readonly property var current: cursor >= 0 && cursor < rows.length ? rows[cursor] : null
@@ -31,14 +31,11 @@ Item {
     svc.request("queue", {}, function (r) {
       if (!r.ok) { view.error = Model.errorText(r.error); return }
       view.error = ""
-      var keep = view.follow || (view.current && view.current.item ? view.current.item.videoId : "")
-      view.follow = ""
+      var keep = view.followIndex >= 0 ? view.followIndex : list.cursor
+      view.followIndex = -1
       view.queue = r.data
-      if (jumpToCurrent || !keep) {
-        list.cursor = r.data.index >= 0 ? r.data.index : Model.firstRow(view.rows)
-      } else {
-        for (var i = 0; i < view.rows.length; i++) if (view.rows[i].item && view.rows[i].item.videoId === keep && !view.rows[i].automix) { list.cursor = i; return }
-      }
+      list.cursor = jumpToCurrent ? (r.data.index >= 0 ? r.data.index : Model.firstRow(view.rows))
+        : Math.min(Math.max(0, keep), view.rows.length - 1)
     })
   }
 
@@ -65,7 +62,7 @@ Item {
     var to = row.queueIndex + d
     if (to < 0 || to >= view.queue.items.length) return
     // The reload after the move puts the cursor back on this song.
-    view.follow = row.item.videoId
+    view.followIndex = to
     svc.request("queue.move", { from: row.queueIndex, to: to }, function (r) { done(r) })
   }
 
@@ -94,10 +91,11 @@ Item {
 
   RowList {
     id: list
+    svc: view.svc
     anchors.fill: parent
     bar: view.bar
     rows: view.rows
-    playingId: view.svc ? view.svc.videoId : ""
+    playingId: view.svc ? view.svc.trackId : ""
     actionsFor: view.actionsFor
     emptyText: view.error !== "" ? view.error : "Nothing queued yet. Press / to find something."
     onActivated: function (i) { view.jump(view.rows[i]) }

@@ -6,7 +6,7 @@ queue, the footer's "?") with a fake service in a private Quickshell,
 offscreen, and reads the box of every button from its log. Skips when
 Quickshell, the Omarchy shell or a desktop session is not available.
 """
-import testenv  # noqa: F401 - isolates HOME/XDG_*/SOLFA_* before anything else runs
+import testenv  # noqa: F401 - isolates HOME/XDG_*/WAX_* before anything else runs
 import json
 import os
 import re
@@ -30,8 +30,8 @@ def render(workdir, scale="1", extra_env=None):
                          ("views", os.path.join(ROOT, "views")), ("lib", os.path.join(ROOT, "lib")),
                          ("shell.qml", os.path.join(HERE, "qml", "ControlsScene.qml"))):
         os.symlink(target, os.path.join(cfg, name))
-    out = os.environ.get("SOLFA_SCENE_OUT") or os.path.join(workdir, "scene.png")
-    env = dict(os.environ, QT_QPA_PLATFORM="offscreen", QT_SCALE_FACTOR=scale, SOLFA_SCENE_OUT=out,
+    out = os.environ.get("WAX_SCENE_OUT") or os.path.join(workdir, "scene.png")
+    env = dict(os.environ, QT_QPA_PLATFORM="offscreen", QT_SCALE_FACTOR=scale, WAX_SCENE_OUT=out,
                XDG_RUNTIME_DIR=workdir, **(extra_env or {}))
     # Its own runtime dir keeps the scene out of the live shell's instance
     # list; GTK, loaded by Quickshell, still wants the desktop's display.
@@ -53,7 +53,7 @@ def render(workdir, scale="1", extra_env=None):
 class HitTargets(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.workdir = tempfile.mkdtemp(prefix="solfa-hit-")
+        cls.workdir = tempfile.mkdtemp(prefix="wax-hit-")
         found = render(cls.workdir)
         cls.geom, cls.clicks = found["GEOM"], found["CLICKS"]
 
@@ -123,12 +123,12 @@ class HitTargets(unittest.TestCase):
                      "Quickshell, the Omarchy shell or a desktop session is missing")
 class AdSkipButton(unittest.TestCase):
     """During an advert the old top "Skip advert" HitButton is gone; a filled
-    "Skip ad" pill sits by the advert's own clock instead (SOLFA_SCENE_AD=1)."""
+    "Skip ad" pill sits by the advert's own clock instead (WAX_SCENE_AD=1)."""
 
     @classmethod
     def setUpClass(cls):
-        cls.workdir = tempfile.mkdtemp(prefix="solfa-hit-ad-")
-        found = render(cls.workdir, extra_env={"SOLFA_SCENE_AD": "1"})
+        cls.workdir = tempfile.mkdtemp(prefix="wax-hit-ad-")
+        found = render(cls.workdir, extra_env={"WAX_SCENE_AD": "1"})
         cls.geom, cls.clicks = found["GEOM"], found["CLICKS"]
 
     @classmethod

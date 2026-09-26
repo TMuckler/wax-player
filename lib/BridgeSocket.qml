@@ -9,12 +9,13 @@ import Quickshell.Io
 // again once a try has failed with "server not found" (no socket file yet,
 // or a bridge restarting): setting `connected` back to true, even after
 // false or a path change, does nothing. Reusing one left the panel on
-// "Starting Solfa" for good after a bridge restart, while the bridge's
+// "Starting Wax" for good after a bridge restart, while the bridge's
 // orphan lease closed every new bridge 30 s later for want of a UI.
 Item {
   id: root
 
   property string path: ""
+  property bool active: true
   readonly property bool connected: sock !== null && sock.connected
   signal read(string data)
 
@@ -25,6 +26,7 @@ Item {
   function flush() { if (sock) sock.flush() }
 
   function retry() {
+    if (!root.active) return
     if (sock !== null && sock.connected) return
     if (sock !== null) sock.destroy()
     tries++
@@ -48,7 +50,7 @@ Item {
   Timer {
     interval: root.tries < 15 ? 700 : 3000
     repeat: true
-    running: !root.connected && root.path !== ""
+    running: root.active && !root.connected && root.path !== ""
     triggeredOnStart: true
     onTriggered: root.retry()
   }

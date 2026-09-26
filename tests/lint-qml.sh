@@ -7,7 +7,7 @@ cd "$(dirname "$0")/.."
 QMLLINT="${QMLLINT:-/usr/lib/qt6/bin/qmllint}"
 SHELL_DIR="${OMARCHY_PATH:-/usr/share/omarchy}/shell"
 [[ -x "$QMLLINT" && -d "$SHELL_DIR/Ui" ]] || { echo "qmllint or the Omarchy shell is missing; skipping"; exit 0; }
-IMPORTS="$(mktemp -d "${TMPDIR:-/tmp}/solfa-qml.XXXXXX")"
+IMPORTS="$(mktemp -d "${TMPDIR:-/tmp}/wax-qml.XXXXXX")"
 trap 'rm -rf -- "$IMPORTS"' EXIT
 mkdir -p "$IMPORTS/qs"
 ln -s "$SHELL_DIR/Ui" "$IMPORTS/qs/Ui"

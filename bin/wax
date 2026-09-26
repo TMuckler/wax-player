@@ -1,14 +1,14 @@
 #!/usr/bin/python3
-"""solfa — command line for Solfa (keybindings, scripts, debugging).
+"""wax — command line for Wax (keybindings, scripts, debugging).
 
-    solfa toggle | open | close        the panel (through the shell)
-    solfa play-pause | next | prev     playback
-    solfa like                         like the current song (again: remove the like)
-    solfa volume +5 | -5 | 40          volume, relative or absolute
-    solfa status                       one line: engine, account, song
-    solfa quit                         close the engine (also when the bridge is gone)
-    solfa call OP [JSON]               any bridge operation, raw reply
-    solfa events                       follow the bridge's events (Ctrl+C to stop)
+    wax toggle | open | close        the panel (through the shell)
+    wax play-pause | next | prev     playback
+    wax like                         like the current song (again: remove the like)
+    wax volume +5 | -5 | 40          volume, relative or absolute
+    wax status                       one line: engine, account, song
+    wax quit                         exit the player and its background bridge
+    wax call OP [JSON]               any bridge operation, raw reply
+    wax events                       follow the bridge's events (Ctrl+C to stop)
 """
 import json
 import os
@@ -20,7 +20,7 @@ import subprocess
 import sys
 import time
 
-PLUGIN_ID = "io.github.sirallap.solfa"
+PLUGIN_ID = "local.wax.player"
 
 # A minimal, explicit environment for every child process this CLI spawns: an
 # allow-list, never this process's own full environment. PATH is always fixed,
@@ -44,45 +44,15 @@ def child_env(extra=None):
     return env
 
 
-RUNTIME_DIR = pathlib.Path(os.environ.get("SOLFA_RUNTIME_DIR") or
+RUNTIME_DIR = pathlib.Path(os.environ.get("WAX_RUNTIME_DIR") or
                            pathlib.Path(os.environ.get("XDG_RUNTIME_DIR") or f"/run/user/{os.getuid()}") / PLUGIN_ID)
 SOCKET_PATH = RUNTIME_DIR / "bridge.sock"
-PROFILE_DIR = pathlib.Path(os.environ.get("SOLFA_PROFILE_DIR") or
-                           pathlib.Path(os.environ.get("XDG_DATA_HOME") or pathlib.Path.home() / ".local/share") / PLUGIN_ID / "engine")
-
-
-def engine_pid():
-    """The engine's browser pid from its profile lock, checked against /proc."""
-    try:
-        host, _, pid = os.readlink(PROFILE_DIR / "SingletonLock").rpartition("-")
-        cmd = pathlib.Path(f"/proc/{pid}/cmdline").read_bytes()
-    except (OSError, ValueError):
-        return 0
-    want = re.escape(("--user-data-dir=" + str(PROFILE_DIR)).encode())
-    if host != socket.gethostname() or not re.search(rb"(^|[\s\0])" + want + rb"([\s\0]|$)", cmd):
-        return 0
-    return int(pid)
-
-
 def quit_engine():
-    """Close the engine through the bridge; without a bridge, by its checked pid."""
-    try:
-        b = Bridge(exit_if_down=False, timeout=8)
-        if b.sock:
-            b.call("engine.stop")
-            return 0
-    except OSError:
-        pass
-    pid = engine_pid()
-    if not pid:
+    bridge = Bridge(exit_if_down=False, timeout=8)
+    if bridge.sock:
+        ok(bridge.call("app.quit"))
         return 0
-    os.kill(pid, signal.SIGTERM)
-    for _ in range(50):
-        if not engine_pid():
-            return 0
-        time.sleep(0.1)
-    print("solfa: the engine did not close", file=sys.stderr)
-    return 1
+    return shell_ipc("quit")
 
 
 class Bridge:
@@ -95,7 +65,7 @@ class Bridge:
             self.sock.close()
             self.sock = None
             if exit_if_down:
-                sys.exit("solfa: the bridge is not running (is the plugin enabled?)")
+                sys.exit("wax: the bridge is not running (is the plugin enabled?)")
         self.buf = b""
         self.next_id = 0
 
@@ -116,7 +86,7 @@ class Bridge:
         for msg in self.lines():
             if msg.get("id") == rid:
                 return msg
-        sys.exit("solfa: the bridge closed the connection")
+        sys.exit("wax: the bridge closed the connection")
 
 
 QS = "/usr/bin/qs"
@@ -124,7 +94,7 @@ QS = "/usr/bin/qs"
 
 def shell_ipc(method):
     if not os.access(QS, os.X_OK):
-        print("solfa: " + QS + " not found", file=sys.stderr)
+        print("wax: " + QS + " not found", file=sys.stderr)
         return 1
     cmd = [QS, "ipc", "-p", os.environ.get("OMARCHY_PATH", "/usr/share/omarchy") + "/shell", "call", PLUGIN_ID, method]
     return subprocess.run(cmd, stdout=subprocess.DEVNULL, env=child_env()).returncode
@@ -133,7 +103,7 @@ def shell_ipc(method):
 def ok(reply):
     if not reply.get("ok"):
         error, message = reply.get("error", "error"), reply.get("message", "")
-        sys.exit("solfa: " + error + (": " + message if message and message != error else ""))
+        sys.exit("wax: " + error + (": " + message if message and message != error else ""))
     return reply.get("data")
 
 
@@ -155,10 +125,10 @@ def main(argv):
         ok(b.call("transport", {"action": "previous"}))
     elif cmd == "like":
         player = ok(b.call("state")).get("player") or {}
-        if not player.get("videoId"):
-            sys.exit("solfa: nothing is playing")
+        if not player.get("trackId"):
+            sys.exit("wax: nothing is playing")
         status = "INDIFFERENT" if player.get("like") == "LIKE" else "LIKE"
-        ok(b.call("like", {"videoId": player["videoId"], "status": status}))
+        ok(b.call("like", {"trackId": player["trackId"], "status": status}))
     elif cmd == "volume" and rest:
         value = rest[0]
         current = (ok(b.call("state")).get("player") or {}).get("volume", 100)

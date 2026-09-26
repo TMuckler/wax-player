@@ -10,7 +10,7 @@ import "views" as Views
 // Everything works from the keyboard; the hint line says how.
 Panel {
   id: root
-  moduleName: "io.github.sirallap.solfa"
+  moduleName: "local.wax.player"
   manageIpc: false
 
   property var anchorItem: null
@@ -26,6 +26,8 @@ Panel {
   ]
   property string tab: "queue"
   property var pages: []
+  readonly property string accountKey: svc ? (svc.account.url || "") + "|" + (svc.account.username || "") : ""
+  onAccountKeyChanged: { pages = []; detailView.info = null; detailView.page = null }
   readonly property var view: pages.length > 0 ? detailView
     : tab === "queue" ? queueView : tab === "search" ? searchView : tab === "library" ? libraryView : lyricsView
   property bool allKeys: false
@@ -41,7 +43,7 @@ Panel {
     if (!opened) { allKeys = false; settingsOpen = false; return }
     if (svc) svc.lastError = ""  // old news from while it was closed
     if (svc && !svc.hasTrack && tab === "queue") tab = "search"
-    // With autostart off, opening the panel is what starts YouTube Music.
+    // Opening the panel starts playback services when autostart is off.
     if (svc && svc.bridgeUp && svc.engine.status === "stopped") svc.startEngine()
     Qt.callLater(function () {
       root.focusKeys()
@@ -90,6 +92,7 @@ Panel {
   // closed one would swallow it).
   Connections {
     target: root.svc
+    function onConnectionRequested() { root.settingsOpen = true; settingsView.navIndex = 0 }
     function onLastErrorChanged() { if (root.opened && root.svc.lastError) { root.say(root.svc.lastError); root.svc.lastError = "" } }
   }
 
@@ -104,10 +107,10 @@ Panel {
   function itemActions(row) {
     var it = row && row.item
     if (!it) return []
-    if (it.videoId) return [
+    if (it.trackId) return [
       { name: "next", icon: Icons.playNext, tip: "Play next (e)" },
       { name: "queue", icon: Icons.plus, tip: "Add to queue (a)" },
-      { name: "radio", icon: Icons.radio, tip: "Start radio (R)" }
+      { name: "radio", icon: Icons.radio, tip: "Start mix (R)" }
     ]
     if (it.kind === "artist") return [{ name: "play", icon: Icons.shuffle, tip: "Shuffle this artist" }]
     if (it.playlistId) return [{ name: "play", icon: Icons.play, tip: "Play" }]
@@ -117,8 +120,8 @@ Panel {
   function activateRow(row, contextList) {
     var it = row && row.item
     if (!it || !svc) return
-    if (it.videoId) {
-      var args = { videoId: it.videoId }
+    if (it.trackId) {
+      var args = { trackId: it.trackId }
       if (contextList) args.playlistId = contextList
       else if (it.playlistId) args.playlistId = it.playlistId
       svc.request("play", args, function (r) { if (r.ok) root.say("Playing " + it.title); else svc.report(r.error) })
@@ -137,7 +140,7 @@ Panel {
       })
     } else if (name === "radio") {
       svc.radioFor(it)
-      root.say("Radio from " + it.title)
+      root.say("Mix from " + it.title)
     } else if (name === "play") {
       svc.playItem(it, function (r) { if (r.ok) root.say("Playing " + it.title); else svc.report(r.error) })
     }
@@ -163,6 +166,8 @@ Panel {
       event.accepted = true
       return
     }
+    if (root.svc && root.svc.gated && !root.settingsOpen) return
+    if (root.settingsOpen && settingsView.inputFocused) return
     if (root.settingsOpen) {
       if (k === Qt.Key_Tab || k === Qt.Key_Backtab) { settingsView.switchColumn(); event.accepted = true; return }
       if (k === Qt.Key_Down) { settingsView.move(1); event.accepted = true; return }
@@ -216,19 +221,18 @@ Panel {
       case "=": case "+": svc.nudgeVolume(1); break
       case "m": svc.toggleMute(); break
       case "f": svc.toggleLike(); break
-      case "d": svc.dislike(); break
       case "r": svc.cycleRepeat(); break
       case "s": svc.shuffle(); root.say("Queue shuffled"); break
       case "a": if (cur) root.runAction("queue", cur); break
       case "e": if (cur) root.runAction("next", cur); break
-      case "R": if (cur && cur.item && cur.item.videoId) root.runAction("radio", cur); else if (svc.hasTrack) { svc.radioFor(svc.player); root.say("Radio from " + svc.title) } break
+      case "R": if (cur && cur.item && cur.item.trackId) root.runAction("radio", cur); else if (svc.hasTrack) { svc.radioFor(svc.player); root.say("Mix from " + svc.title) } break
       case "g": root.openArtist(cur); break
       case "o": root.openAlbum(cur); break
       case "[": if (v === searchView) searchView.cycleFilter(-1); else if (v === libraryView) libraryView.cycleSection(-1); break
       case "]": if (v === searchView) searchView.cycleFilter(1); else if (v === libraryView) libraryView.cycleSection(1); break
       case "w": if (svc.gated) svc.signIn(); else svc.showWindow(); break
       case "W": svc.hideWindow(); break
-      case "i": if (brand.showSignIn) svc.signIn(); else handled = false; break
+      case "i": svc.signIn(); break
       case "?": root.allKeys = !root.allKeys; break
       default: handled = false
     }
@@ -237,12 +241,12 @@ Panel {
 
   // g / o: the artist or album of the row under the cursor, else of the song.
   function openArtist(row) {
-    var it = row && row.item && row.item.videoId ? row.item : (svc.hasTrack ? svc.player : null)
+    var it = row && row.item && row.item.trackId ? row.item : (svc.hasTrack ? svc.player : null)
     var a = it && it.artists && it.artists.length && it.artists[0].id ? it.artists[0] : null
     if (a) openPage({ browseId: a.id, title: a.name })
   }
   function openAlbum(row) {
-    var it = row && row.item && row.item.videoId ? row.item : (svc.hasTrack ? svc.player : null)
+    var it = row && row.item && row.item.trackId ? row.item : (svc.hasTrack ? svc.player : null)
     if (it && it.album && it.album.id) openPage({ browseId: it.album.id, title: it.album.name })
   }
 
@@ -288,7 +292,7 @@ Panel {
         reserveRight: brand.width
       }
 
-      // Solfa's name and the power button, top right: far from play.
+      // Wax's name and the power button, top right: far from play.
       Views.BrandCorner {
         id: brand
         objectName: "panelBrand"
@@ -324,8 +328,7 @@ Panel {
         bar: root.bar
       }
 
-      // While YouTube Music waits on Google (cookies, sign-in) there is one
-      // thing to do: the card above. Nothing below it would work yet.
+      // Library features become available after the server connection succeeds.
       readonly property bool gated: root.svc ? root.svc.gated : false
       // Off, the same: only the way back on.
       readonly property bool off: root.svc ? root.svc.closed === true : false

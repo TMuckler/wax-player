@@ -4,7 +4,7 @@ import qs.Commons
 import "../lib/Model.js" as Model
 
 // Search: a field, filter chips, and one list of results. With an empty
-// field it shows YouTube Music's home shelves, so there is always
+// field it shows Navidrome's home shelves, so there is always
 // something to play.
 Item {
   id: view
@@ -16,6 +16,7 @@ Item {
   readonly property string family: bar ? bar.fontFamily : Style.font.family
 
   property string query: ""
+  onQueryChanged: { seq++; result = null; error = ""; busy = false }
   property string filter: ""
   property var result: null
   property var home: null
@@ -33,26 +34,44 @@ Item {
 
   readonly property var filters: [
     { key: "", label: "All" }, { key: "songs", label: "Songs" }, { key: "albums", label: "Albums" },
-    { key: "artists", label: "Artists" }, { key: "playlists", label: "Playlists" }, { key: "videos", label: "Videos" }
+    { key: "artists", label: "Artists" }, { key: "playlists", label: "Playlists" }
   ]
 
   // On screen: the panel is open on this view (see QueueView).
+  readonly property string accountKey: svc ? (svc.account.url || "") + "|" + (svc.account.username || "") : ""
+  onAccountKeyChanged: { seq++; home = null; result = null; busy = false; if (active && ready) loadHome() }
   property bool active: false
   function shown() { if (!home && svc && svc.ready) loadHome() }
   readonly property bool ready: svc ? svc.ready : false
   onReadyChanged: if (ready && active && !home) loadHome()
   function focusInput() { field.forceActiveFocus(); field.selectAll() }
-  function move(dy) { list.cursor = Model.moveCursor(rows, list.cursor, dy) }
+  function move(dy) { list.cursor = Model.moveCursor(rows, list.cursor, dy); if (dy > 0 && list.cursor >= rows.length - 3) loadMore() }
+  function loadMore() {
+    if (busy || !result || !result.continuation || !filter) return
+    busy = true
+    var serial = seq
+    svc.request("search", { q: query.trim(), filter: filter, continuation: result.continuation }, function (r) {
+      if (serial !== view.seq) return
+      view.busy = false
+      if (!r.ok) { view.error = Model.errorText(r.error); return }
+      var next = Object.assign({}, view.result)
+      next[view.filter] = (next[view.filter] || []).concat(r.data[view.filter] || [])
+      next.continuation = r.data.continuation
+      view.result = next
+    })
+  }
 
   function loadHome() {
     if (!svc) return
-    svc.request("home", {}, function (r) { if (r.ok) view.home = r.data })
+    var key = view.accountKey
+    svc.request("home", {}, function (r) { if (key !== view.accountKey) return; if (r.ok) view.home = r.data; else view.error = Model.errorText(r.error) })
   }
 
   function run() {
     var q = view.query.trim()
-    if (!q) { view.result = null; view.error = ""; return }
     var s = ++view.seq
+    view.result = null
+    if (!q) { view.result = null; view.error = ""; view.busy = false; return }
     view.busy = true
     view.error = ""
     var args = { q: q }
@@ -88,7 +107,8 @@ Item {
   }
 
   function clearField() {
-    if (field.text !== "") { field.text = ""; view.query = ""; view.result = null }
+    debounce.stop()
+    if (field.text !== "") { ++view.seq; view.busy = false; field.text = ""; view.query = ""; view.result = null }
     else panel.focusKeys()
   }
 
@@ -138,6 +158,7 @@ Item {
 
   RowList {
     id: list
+    svc: view.svc
     anchors.top: top.bottom
     anchors.topMargin: Style.space(8)
     anchors.left: parent.left
@@ -145,10 +166,11 @@ Item {
     anchors.bottom: parent.bottom
     bar: view.bar
     rows: view.rows
-    playingId: view.svc ? view.svc.videoId : ""
+    playingId: view.svc ? view.svc.trackId : ""
     actionsFor: function (row) { return view.panel ? view.panel.itemActions(row) : [] }
     emptyText: view.busy ? "Searching" : view.error !== "" ? view.error
       : view.query.trim() !== "" ? "No results" : (view.home ? "" : "Loading suggestions")
+    onAtYEndChanged: if (atYEnd) view.loadMore()
     onActivated: function (i) { view.panel.activateRow(view.rows[i]) }
     onAction: function (name, i) { view.panel.runAction(name, view.rows[i]) }
     onHeaderActivated: function (i) { view.headerActivated(i) }

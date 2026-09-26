@@ -13,7 +13,7 @@ vm.runInContext(src, M)
 const deep = (a, b) => assert.equal(JSON.stringify(a), JSON.stringify(b))
 
 test("position runs on while playing and stops at the end", () => {
-  const p = { videoId: "AAAAAAAAAAA", position: 10, at: 1000, playing: true, duration: 30 }
+  const p = { trackId: "AAAAAAAAAAA", position: 10, at: 1000, playing: true, duration: 30 }
   assert.equal(M.positionAt(p, 6000), 15)
   assert.equal(M.positionAt(p, 100000), 30)
   assert.equal(M.positionAt(Object.assign({}, p, { playing: false }), 6000), 10)
@@ -31,7 +31,7 @@ test("times", () => {
 
 test("artists and row subtitles", () => {
   assert.equal(M.artistsText([{ name: "Mira" }, { name: "Tor" }, null]), "Mira, Tor")
-  assert.equal(M.rowSubtitle({ videoId: "x", artists: [], album: { name: "Harbour" } }), "Harbour")
+  assert.equal(M.rowSubtitle({ trackId: "x", artists: [], album: { name: "Harbour" } }), "Harbour")
   assert.equal(M.rowSubtitle({ browseId: "MPRE", subtitle: "Album · Mira · 2019" }), "Album · Mira · 2019")
 })
 
@@ -47,11 +47,11 @@ test("repeat and like cycle", () => {
 })
 
 test("search rows: groups with headers, capped, and a filter shows one group whole", () => {
-  const song = (i) => ({ kind: "song", videoId: "S" + i })
+  const song = (i) => ({ kind: "song", trackId: "S" + i })
   const r = { top: { kind: "artist", browseId: "UC1" }, songs: [1, 2, 3, 4, 5, 6, 7, 8].map(song), albums: [{ browseId: "MPRE1" }], artists: [], playlists: [], videos: [] }
   const rows = M.searchRows(r, "")
   deep(rows.filter((x) => x.header).map((x) => x.header), ["Top result", "Songs", "Albums"])
-  assert.equal(rows.filter((x) => x.item && x.item.videoId).length, 6)
+  assert.equal(rows.filter((x) => x.item && x.item.trackId).length, 6)
   assert.equal(rows.find((x) => x.header === "Songs").more, "songs")
   const only = M.searchRows(r, "songs")
   assert.equal(only.length, 8)
@@ -59,7 +59,7 @@ test("search rows: groups with headers, capped, and a filter shows one group who
 })
 
 test("queue rows: queued, then autoplay under its own header", () => {
-  const rows = M.queueRows({ items: [{ videoId: "A" }, { videoId: "B" }], automix: [{ videoId: "C" }], index: 1 })
+  const rows = M.queueRows({ items: [{ trackId: "A" }, { trackId: "B" }], automix: [{ trackId: "C" }], index: 1 })
   assert.equal(rows.length, 4)
   assert.equal(rows[1].current, true)
   assert.equal(rows[2].header, "Autoplay")
@@ -95,7 +95,7 @@ test("expired requests", () => {
 test("global keys: only the free ones, ours do not count as taken", () => {
   const binds = JSON.stringify([
     { modmask: 64, key: "m", description: "Someone else's" },
-    { modmask: 72, key: "N", description: "Solfa: next song" }
+    { modmask: 72, key: "N", description: "Wax Player: next song" }
   ])
   const free = M.freeKeys(binds).map((k) => k.keys)
   assert.ok(!free.includes("SUPER + M"))
@@ -105,12 +105,12 @@ test("global keys: only the free ones, ours do not count as taken", () => {
 
 test("bind Lua unbinds first and calls the service over the shell's IPC", () => {
   const lua = M.bindLua(M.GLOBAL_KEYS.slice(0, 2))
-  assert.match(lua, /pcall\(hl\.unbind, \[\[SUPER \+ M\]\]\); hl\.bind\(\[\[SUPER \+ M\]\], hl\.dsp\.exec_cmd\(\[\[\/usr\/share\/omarchy\/bin\/omarchy-shell shell toggle io\.github\.sirallap\.solfa '\{\}'\]\]\)/)
-  assert.match(lua, /exec_cmd\(\[\[\/usr\/share\/omarchy\/bin\/omarchy-shell io\.github\.sirallap\.solfa playPause\]\]\)/)
+  assert.match(lua, /pcall\(hl\.unbind, \[\[SUPER \+ M\]\]\); hl\.bind\(\[\[SUPER \+ M\]\], hl\.dsp\.exec_cmd\(\[\[\/usr\/share\/omarchy\/bin\/omarchy-shell shell toggle local\.wax\.player '\{\}'\]\]\)/)
+  assert.match(lua, /exec_cmd\(\[\[\/usr\/share\/omarchy\/bin\/omarchy-shell local\.wax\.player playPause\]\]\)/)
   // every IPC method a key calls exists on the service's handler
   const svc = fs.readFileSync(path.join(__dirname, "..", "Service.qml"), "utf8")
   for (const k of M.GLOBAL_KEYS) if (k.command !== "toggle") assert.match(svc, new RegExp("function " + k.command + "\\(\\): void"))
-  assert.equal(M.unbindLua(JSON.stringify([{ description: "Solfa: like" }])), "pcall(hl.unbind, [[SUPER + ALT + L]]); ")
+  assert.equal(M.unbindLua(JSON.stringify([{ description: "Wax Player: like" }])), "pcall(hl.unbind, [[SUPER + ALT + L]]); ")
 })
 
 // M3: no bare program name goes through Hyprland's exec (a PATH lookup, sh -c).
@@ -124,9 +124,9 @@ test("bind Lua always runs an absolute omarchy-shell, never a bare name", () => 
 
 test("engine words and error words", () => {
   assert.equal(M.engineLine({ status: "ready" }, { host: "music.youtube.com" }), "")
-  assert.equal(M.engineLine({ status: "ready" }, { host: "consent.youtube.com" }), "Waiting for sign-in")
+  assert.equal(M.engineLine({ status: "ready" }, { host: "consent.youtube.com" }), "")
   assert.match(M.engineLine({ status: "stuck" }, {}), /stopped answering/)
-  assert.equal(M.engineLine({ status: "signing-in" }, {}), "Signing in, in the Google window")
+  assert.equal(M.engineLine({ status: "signing-in" }, {}), "Connecting to Navidrome")
   assert.equal(M.errorText("engine-signing-in"), "Finish signing in first")
   assert.equal(M.errorText("signin-required"), "Sign in to do that")
   assert.match(M.errorText("http-429"), /429/)
@@ -170,9 +170,9 @@ test("CODE_VERSION matches manifest.json's version", () => {
 })
 
 test("engineLineWhileDown asks for a shell restart only when the code on disk is newer", () => {
-  assert.equal(M.engineLineWhileDown(M.CODE_VERSION), "Starting Solfa")
-  assert.equal(M.engineLineWhileDown(""), "Starting Solfa")
-  assert.equal(M.engineLineWhileDown("9.9.9"), "Solfa was updated. Restart the shell to finish")
+  assert.equal(M.engineLineWhileDown(M.CODE_VERSION), "Starting Wax")
+  assert.equal(M.engineLineWhileDown(""), "Starting Wax")
+  assert.equal(M.engineLineWhileDown("9.9.9"), "Wax was updated. Restart the shell to finish")
 })
 
 test("SETTINGS_DEFAULTS matches manifest.json's barWidget.defaults exactly", () => {
@@ -218,34 +218,23 @@ test("eqPayload: off is always flat, whatever preset or custom bands are stored"
 test("settings writes: a stale echo from the shell never undoes a write it has not caught up with", () => {
   // Two quick writes; the shell's echo of the first arrives after both.
   let pending = { eqBands: "[1,0,0,0,0,0,0,0,0,0]", eqPreset: "custom" }
-  let r = M.mergePendingSettings({ id: "io.github.sirallap.solfa", eqBands: "[1,0,0,0,0,0,0,0,0,0]", eqPreset: "flat" }, pending)
+  let r = M.mergePendingSettings({ id: "local.wax.player", eqBands: "[1,0,0,0,0,0,0,0,0,0]", eqPreset: "flat" }, pending)
   assert.equal(r.settings.eqPreset, "custom", "write #2 is kept over the stale echo")
   assert.equal(r.settings.eqBands, "[1,0,0,0,0,0,0,0,0,0]")
   assert.deepEqual(Object.keys(r.pending), ["eqPreset"], "write #1 is confirmed by its echo")
-  r = M.mergePendingSettings({ id: "io.github.sirallap.solfa", eqBands: "[1,0,0,0,0,0,0,0,0,0]", eqPreset: "custom" }, r.pending)
+  r = M.mergePendingSettings({ id: "local.wax.player", eqBands: "[1,0,0,0,0,0,0,0,0,0]", eqPreset: "custom" }, r.pending)
   assert.equal(Object.keys(r.pending).length, 0, "all confirmed")
-  assert.equal(r.settings.id, "io.github.sirallap.solfa", "other keys of the entry are kept")
+  assert.equal(r.settings.id, "local.wax.player", "other keys of the entry are kept")
 })
 
 test("settings reset: defaults over the current entry, other keys kept", () => {
-  const next = M.settingsAfterReset({ id: "io.github.sirallap.solfa", eqEnabled: true, recycleHours: 30, somethingElse: 7 })
+  const next = M.settingsAfterReset({ id: "local.wax.player", eqEnabled: true, startPaused: true, somethingElse: 7 })
   assert.equal(next.eqEnabled, false)
-  assert.equal(next.recycleHours, 12)
+  assert.equal(next.startPaused, false)
   assert.equal(next.somethingElse, 7)
-  assert.equal(next.id, "io.github.sirallap.solfa")
+  assert.equal(next.id, "local.wax.player")
 })
 
-test("recycle knobs are clamped to a range the page can live with", () => {
-  assert.equal(M.recycleHeapMbFor(undefined), 400)
-  assert.equal(M.recycleHeapMbFor("abc"), 400)
-  assert.equal(M.recycleHeapMbFor(-5), 200)
-  assert.equal(M.recycleHeapMbFor(5000), 700)
-  assert.equal(M.recycleHeapMbFor(450), 450)
-  assert.equal(M.recycleHoursFor(0.001), 1)
-  assert.equal(M.recycleHoursFor(500), 72)
-  assert.equal(M.recycleHoursFor(null), 12)
-  assert.equal(M.recycleHoursFor(24), 24)
-})
 
 test("sleep timer: a fade cut short gives the volume back", () => {
   assert.equal(M.sleepVolumeToRestore(-1), null, "no fade running: nothing to give back")
@@ -331,4 +320,11 @@ test("stale-key/version restart fires once per tag, then holds off on the same t
   const tag2 = M.restartTag("true|/usr/bin/brave", "0.2.1")
   assert.equal(M.shouldRestartForStale(false, true, tag1, tag2), true, "a genuinely new version: restart once")
   assert.equal(M.shouldRestartForStale(false, false, tag1, tag2), false, "nothing stale: never restart")
+})
+
+
+test("Navidrome never takes or unbinds the original Solfa shortcuts", () => {
+  const upstream = JSON.stringify([{ modmask: 64, key: "M", description: "Solfa: open or close" }])
+  assert.ok(!M.freeKeys(upstream).some((k) => k.keys === "SUPER + M"))
+  assert.equal(M.unbindLua(upstream), "")
 })

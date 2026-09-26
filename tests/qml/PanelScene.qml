@@ -10,12 +10,14 @@ import "lib/Model.js" as Model
 // its "‹ Settings" back row must sit on the top row, level with the brand
 // corner. The shell's KeyboardPanel is swapped for tests/qml/stub (a plain
 // card: no layer-shell window, no keyboard grab). Logs one "STATE {...}"
-// line; saves the settings-open frame to SOLFA_SCENE_OUT when set.
+// line; saves the settings-open frame to WAX_SCENE_OUT when set.
 ShellRoot {
   id: scene
 
   QtObject {
     id: fakeSvc
+    signal connectionRequested()
+    signal libraryChanged()
     property bool bridgeUp: true
     property bool ready: true
     property bool signingIn: false
@@ -28,10 +30,10 @@ ShellRoot {
     property bool isAd: false
     property bool panelOpen: false
     property string lastError: ""
-    property var engine: ({ status: "ready", error: "", signedIn: true, host: "music.youtube.com", wantRunning: true })
-    property var account: ({ signedIn: true, host: "music.youtube.com" })
-    property var player: ({ videoId: "AAAAAAAAAAA", title: "Northern Lights", artists: [{ name: "The Examples" }], playing: true, volume: 70, duration: 200, position: 42 })
-    property string videoId: "AAAAAAAAAAA"
+    property var engine: ({ status: "ready", error: "", signedIn: true, url: "https://music.example.test", username: "test", wantRunning: true })
+    property var account: ({ signedIn: true, url: "https://music.example.test", username: "test" })
+    property var player: ({ trackId: "AAAAAAAAAAA", title: "Northern Lights", artists: [{ name: "The Examples" }], playing: true, volume: 70, duration: 200, position: 42 })
+    property string trackId: "AAAAAAAAAAA"
     property string title: "Northern Lights"
     property string artist: "The Examples"
     property string album: ""
@@ -46,9 +48,9 @@ ShellRoot {
     property string engineLine: "Playing"
     property var settings: ({
       barControls: true, showTitle: true, maxLabelWidth: 160, showWhenIdle: true, notify: true,
-      globalKeys: true, autostart: true, browser: "",
+      globalKeys: true, autostart: true,
       eqEnabled: false, eqPreset: "flat", eqBands: "[0,0,0,0,0,0,0,0,0,0]", eqPreamp: 0, eqLoudness: false,
-      startPaused: false, startVolume: "last", recycleHeapMb: 400, recycleHours: 12
+      startPaused: false, startVolume: "last"
     })
     function setting(name, fallback) {
       var v = settings ? settings[name] : undefined
@@ -58,8 +60,8 @@ ShellRoot {
     function resetSettings() {}
     property string sleepMode: "off"
     function nudgeSleepMode(dir) { sleepMode = Model.nextSleepOption(sleepMode, dir) }
-    property string solfaVersion: "0.1.0-fixture"
-    function engineVersion(cb) { if (cb) cb({ ok: true, data: { product: "FakeChrome/999.0 (fixture)" } }) }
+    property string waxVersion: "0.1.0-fixture"
+    function engineVersion(cb) { if (cb) cb({ ok: true, data: { product: "mpv (fixture)" } }) }
     function clearCache(cb) { if (cb) cb({ ok: true, data: {} }) }
     function eraseProfile(cb) { if (cb) cb({ ok: true, data: {} }) }
     property var accountDetails: ({ name: "Alex Example", email: "alex@example.com", avatar: "" })
@@ -104,7 +106,7 @@ ShellRoot {
     Item {
       id: stage
       anchors.fill: parent
-      SolfaPanel {
+      WaxPanel {
         id: panel
         svc: fakeSvc
       }
@@ -156,12 +158,12 @@ ShellRoot {
               brandTop: win.topIn("panelBrand", card), brandMid: win.midIn("panelBrand", card),
               heroBottom: win.find(stage, "panelHero") ? Math.round(win.find(stage, "panelHero").mapToItem(card, 0, win.find(stage, "panelHero").height).y) : null
             }
-            var out = Quickshell.env("SOLFA_SCENE_OUT")
+            var out = Quickshell.env("WAX_SCENE_OUT")
             var finish = function () {
               panel.onKey({ key: Qt.Key_Escape, text: "", modifiers: 0, accepted: false })
               win.after(function () {
                 var backState = { hero: win.shown("panelHero"), tabs: win.shown("panelTabs"), settings: win.shown("settingsView") }
-                // Solfa turned off: only the way back on is shown.
+                // Wax turned off: only the way back on is shown.
                 fakeSvc.hasTrack = false; fakeSvc.isPlaying = false; fakeSvc.ready = false
                 fakeSvc.engine = { status: "stopped", error: "", signedIn: true, host: "", wantRunning: false }
                 fakeSvc.closed = true; fakeSvc.engineLine = Model.engineLine(fakeSvc.engine, fakeSvc.account)
@@ -186,7 +188,7 @@ ShellRoot {
                     console.log("STATE " + JSON.stringify({ closed: closedState, open: openState, afterEsc: backState, off: offState, signing: signingState }))
                     Qt.quit()
                   }
-                  var out2 = Quickshell.env("SOLFA_SCENE_OUT2")
+                  var out2 = Quickshell.env("WAX_SCENE_OUT2")
                   if (out2) card.grabToImage(function (r) { r.saveToFile(out2); done() })
                   else done()
                 })

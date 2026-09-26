@@ -45,13 +45,13 @@ Item {
 
   function load() {
     if (!svc || !svc.hasTrack) { view.lyrics = null; view.forVideo = ""; return }
-    var vid = svc.videoId
+    var vid = svc.trackId
     if (vid === view.forVideo && view.lyrics) return
     view.forVideo = vid
     view.busy = true
     view.error = ""
     view.lyrics = null
-    svc.request("lyrics", { videoId: vid }, function (r) {
+    svc.request("lyrics", { trackId: vid }, function (r) {
       if (vid !== view.forVideo) return
       view.busy = false
       if (r.ok) view.lyrics = r.data

@@ -13,6 +13,7 @@ ListView {
   id: list
 
   property var rows: []
+  property var svc: null
   property int cursor: -1
   property QtObject bar: null
   property string playingId: ""
@@ -54,8 +55,21 @@ ListView {
     required property int index
     readonly property bool isHeader: !!modelData.header
     readonly property var item: modelData.item || null
+    property string coverSource: ""
+    property int coverRequest: 0
+    function loadCover() {
+      var request = ++coverRequest
+      coverSource = item ? (item.thumb || "") : ""
+      if (!coverSource && item && item.coverId && list.svc) {
+        list.svc.request("art", { coverId: item.coverId }, function (r) {
+          if (request === cell.coverRequest && r.ok && r.data.path) cell.coverSource = r.data.uri
+        })
+      }
+    }
+    Component.onCompleted: loadCover()
+    onItemChanged: loadCover()
     readonly property bool selected: index === list.cursor
-    readonly property bool now: !!item && !!item.videoId && (modelData.current === true || (modelData.current === undefined && !modelData.automix && item.videoId === list.playingId))
+    readonly property bool now: !!item && !!item.trackId && (modelData.current === true || (modelData.current === undefined && !modelData.automix && item.trackId === list.playingId))
     readonly property var actions: isHeader ? [] : list.actionsFor(modelData)
     // A handler, not the MouseArea: it stays hovered while the pointer is on
     // one of the row's own buttons, so they do not hide under it.
@@ -134,7 +148,7 @@ ListView {
         width: Style.space(32)
         height: width
         anchors.verticalCenter: parent.verticalCenter
-        source: cell.item ? (cell.item.thumb || "") : ""
+        source: cell.coverSource
         foreground: list.fg
         fill: Util.alpha(list.fg, 0.08)
         fontFamily: list.family

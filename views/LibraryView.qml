@@ -19,6 +19,8 @@ Item {
   ]
   property string section: "playlists"
   property var cache: ({})
+  property int requestSerial: 0
+  property var requests: ({})
   property bool busy: false
   property string error: ""
   readonly property bool signedIn: svc ? svc.signedIn : false
@@ -33,12 +35,18 @@ Item {
 
   function load() {
     if (!svc || !signedIn) return
+    var key = view.accountKey
     var sec = view.section
+    var serial = ++view.requestSerial
+    var pending = Object.assign({}, view.requests)
+    pending[sec] = serial
+    view.requests = pending
     view.busy = true
     view.error = ""
     svc.request("library", { section: sec }, function (r) {
-      view.busy = false
-      if (!r.ok) { view.error = Model.errorText(r.error); return }
+      if (key !== view.accountKey || view.requests[sec] !== serial) return
+      if (sec === view.section) view.busy = false
+      if (!r.ok) { if (sec === view.section) view.error = Model.errorText(r.error); return }
       var c = Object.assign({}, view.cache)
       c[sec] = r.data
       view.cache = c
@@ -46,7 +54,7 @@ Item {
     })
   }
 
-  function setSection(key) { view.section = key; list.cursor = Model.firstRow(view.rows); if (!cache[key]) load() }
+  function setSection(key) { view.section = key; view.busy = false; view.error = ""; list.cursor = Model.firstRow(view.rows); if (!cache[key]) load() }
   function cycleSection(d) {
     var i = 0
     for (var k = 0; k < sections.length; k++) if (sections[k].key === view.section) i = k
@@ -56,7 +64,21 @@ Item {
 
   // On screen: the panel is open on this view (see QueueView).
   property bool active: false
-  onSignedInChanged: { view.cache = ({}); if (signedIn && active) load() }
+  readonly property string accountKey: svc ? (svc.account.url || "") + "|" + (svc.account.username || "") : ""
+  function invalidate() {
+    view.requests = ({})
+    view.cache = ({})
+    view.busy = false
+    view.error = ""
+    if (view.signedIn && view.active) view.load()
+  }
+  onAccountKeyChanged: invalidate()
+  onSignedInChanged: invalidate()
+
+  Connections {
+    target: view.svc
+    function onLibraryChanged() { view.invalidate() }
+  }
 
   Row {
     id: chips
@@ -88,6 +110,7 @@ Item {
 
   RowList {
     id: list
+    svc: view.svc
     visible: view.signedIn
     anchors.top: chips.bottom
     anchors.topMargin: Style.space(8)
@@ -96,10 +119,11 @@ Item {
     anchors.bottom: parent.bottom
     bar: view.bar
     rows: view.rows
-    playingId: view.svc ? view.svc.videoId : ""
+    playingId: view.svc ? view.svc.trackId : ""
     actionsFor: function (row) { return view.panel ? view.panel.itemActions(row) : [] }
     emptyText: view.busy ? "Loading" : view.error !== "" ? view.error : "Nothing here yet"
     onActivated: function (i) { view.panel.activateRow(view.rows[i], view.info && view.info.playlistId ? view.info.playlistId : "") }
+    onHeaderActivated: function (i) { if (view.rows[i].more) view.panel.openPage({ browseId: view.rows[i].more, title: view.rows[i].header }) }
     onAction: function (name, i) { view.panel.runAction(name, view.rows[i]) }
   }
 }

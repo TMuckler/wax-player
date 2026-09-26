@@ -4,7 +4,7 @@ import QtQuick.Shapes
 import QtQuick.Window
 import "../lib/Icons.js" as Icons
 
-// A cover cut to a circle (the record motif of Solfa), with a glyph while
+// A cover cut to a circle (the record motif of Wax), with a glyph while
 // there is no picture. `dim` greys it out, for a paused song.
 Item {
   id: root

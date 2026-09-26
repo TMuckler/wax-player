@@ -10,7 +10,7 @@ import "lib/Icons.js" as Icons
 // The panel's clickable controls with a fake service, rendered once
 // offscreen by a private Quickshell (test_hit_targets.py): the song and its
 // controls, the tabs, a queue with the cursor on a song, and the footer's
-// "?". Saves a picture to $SOLFA_SCENE_OUT, logs every control's box as one
+// "?". Saves a picture to $WAX_SCENE_OUT, logs every control's box as one
 // "GEOM {...}" line, then clicks every control with a synthetic mouse and
 // logs what each click did as one "CLICKS {...}" line.
 ShellRoot {
@@ -20,9 +20,9 @@ ShellRoot {
     id: fakeSvc
     property bool ready: true
     property bool hasTrack: true
-    // SOLFA_SCENE_AD=1: the hero shows an advert instead of the song, for
+    // WAX_SCENE_AD=1: the hero shows an advert instead of the song, for
     // the hit-target test of the Skip ad pill next to its clock.
-    property bool isAd: Quickshell.env("SOLFA_SCENE_AD") === "1"
+    property bool isAd: Quickshell.env("WAX_SCENE_AD") === "1"
     property bool signedIn: true
     property bool isPlaying: true
     property string like: "LIKE"
@@ -39,7 +39,7 @@ ShellRoot {
     property string repeatMode: "ALL"
     property int volume: 60
     property bool muted: false
-    property string videoId: "v1"
+    property string trackId: "v1"
     property var calls: []
     function toggleLike() { calls.push("toggleLike") }
     function skipAd() { calls.push("skipAd") }
@@ -99,10 +99,10 @@ ShellRoot {
           width: parent.width
           height: 4 * Style.space(46)
           rows: Model.queueRows({ index: 0, items: [
-            { videoId: "v1", title: "Northern Lights", artist: "The Examples", duration: 214 },
-            { videoId: "v2", title: "A Much Longer Song Title That Needs Every Pixel It Can Get", artist: "The Examples", duration: 187 },
-            { videoId: "v3", title: "A Much Longer Song Title That Needs Every Pixel It Can Get", artist: "Sample Band", duration: 245 },
-            { videoId: "v4", title: "Fourth Song", artist: "Sample Band", duration: 201 }] })
+            { trackId: "v1", title: "Northern Lights", artist: "The Examples", duration: 214 },
+            { trackId: "v2", title: "A Much Longer Song Title That Needs Every Pixel It Can Get", artist: "The Examples", duration: 187 },
+            { trackId: "v3", title: "A Much Longer Song Title That Needs Every Pixel It Can Get", artist: "Sample Band", duration: 245 },
+            { trackId: "v4", title: "Fourth Song", artist: "Sample Band", duration: 201 }] })
           cursor: 1
           playingId: "v1"
           onAction: function (name, i) { fakeSvc.calls.push("action:" + name + ":" + i) }
@@ -173,7 +173,7 @@ ShellRoot {
       return null
     }
 
-    // SOLFA_SCENE_STATES=1: a few buttons drawn as if the pointer were on
+    // WAX_SCENE_STATES=1: a few buttons drawn as if the pointer were on
     // them, for the picture.
     function hover(item, n) {
       for (var i = 0; i < item.children.length; i++) {
@@ -188,7 +188,7 @@ ShellRoot {
 
     Timer {
       interval: 100
-      running: Quickshell.env("SOLFA_SCENE_STATES") === "1"
+      running: Quickshell.env("WAX_SCENE_STATES") === "1"
       onTriggered: win.hover(stage)
     }
 
@@ -214,7 +214,7 @@ ShellRoot {
       ;["Queue", "Search", "Library", "Lyrics"].forEach(function (t) { targets.push([t, win.find(stage, function (c) { return c.text === t })]) })
       targets.push(["Remove (x)", win.find(list, function (c) { return c.tooltipText === "Remove (x)" && c.opacity > 0 })])
       targets.push(["?", allKeysButton])
-      // Only present when SOLFA_SCENE_AD=1 gave the hero an advert.
+      // Only present when WAX_SCENE_AD=1 gave the hero an advert.
       targets.push(["Skip ad", win.findAny(stage, function (c) { return c.ink !== undefined && c.radius !== undefined })])
       targets.forEach(function (t) {
         var b = t[1]
@@ -268,8 +268,8 @@ ShellRoot {
       onTriggered: {
         console.info("GEOM " + JSON.stringify(win.boxes(stage, { buttons: [], titles: [], cursor: list.cursor })))
         stage.grabToImage(function (r) {
-          r.saveToFile(Quickshell.env("SOLFA_SCENE_OUT"))
-          if (Quickshell.env("SOLFA_SCENE_STATES") !== "1") console.info("CLICKS " + JSON.stringify(win.clickAll()))
+          r.saveToFile(Quickshell.env("WAX_SCENE_OUT"))
+          if (Quickshell.env("WAX_SCENE_STATES") !== "1") console.info("CLICKS " + JSON.stringify(win.clickAll()))
           Qt.quit()
         })
       }

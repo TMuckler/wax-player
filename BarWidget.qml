@@ -10,9 +10,9 @@ import "views" as Views
 // pauses, right click skips, the wheel sets the volume (Shift+wheel seeks).
 BarWidget {
   id: root
-  moduleName: "io.github.sirallap.solfa"
+  moduleName: "local.wax.player"
 
-  readonly property var svc: bar && bar.shell ? bar.shell.serviceFor("io.github.sirallap.solfa") : null
+  readonly property var svc: bar && bar.shell ? bar.shell.serviceFor("local.wax.player") : null
 
   // The service reads its settings from this widget's shell.json entry,
   // and saves new ones back through the shell's plugin API (Settings).
@@ -55,7 +55,7 @@ BarWidget {
 
   // ---- state
   readonly property bool hasTrack: svc ? svc.hasTrack : false
-  // Closed: Solfa's mark and name, dimmed, and nothing else. Any click
+  // Closed: Wax's mark and name, dimmed, and nothing else. Any click
   // starts it again (a left click also opens the panel).
   readonly property bool closed: svc ? svc.closed : false
   readonly property bool playing: svc ? svc.isPlaying : false
@@ -66,7 +66,7 @@ BarWidget {
   readonly property color fg: bar ? bar.barForeground : Color.foreground
   readonly property string family: bar ? bar.fontFamily : Style.font.family
   // The bar is shared: the title only. Artist, album and time are in the tooltip.
-  readonly property string label: signingIn ? "Signing in…" : svc && hasTrack ? svc.title : closed ? "Solfa" : ""
+  readonly property string label: signingIn ? "Signing in…" : svc && hasTrack ? svc.title : closed ? "Wax" : ""
 
   visible: hasTrack || root.setting("showWhenIdle", true)
   implicitWidth: visible ? body.implicitWidth + Style.space(10) : 0
@@ -183,8 +183,8 @@ BarWidget {
       var tip = s && s.hasTrack
         ? s.title + (s.artist ? "\n" + s.artist : "") + (s.album ? "\n" + s.album : "")
           + "\n" + Model.fmtTime(s.position) + " of " + Model.fmtTime(s.duration) + ", volume " + (s.muted ? "muted" : s.volume + "%")
-        : s && s.closed ? "Solfa is off. Click to turn it on."
-        : (s ? (s.engineLine || "Nothing playing. Click to search.") : "Solfa")
+        : s && s.closed ? "Wax is off. Click to turn it on."
+        : (s ? (s.engineLine || "Nothing playing. Click to search.") : "Wax")
       root.bar.showTooltip(root, tip)
     }
     onExited: if (root.bar) root.bar.hideTooltip(root)

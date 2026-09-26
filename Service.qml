@@ -5,10 +5,10 @@ import Quickshell.Hyprland
 import "lib/Model.js" as Model
 import "lib"
 
-// Service.qml — one per shell. It runs the bridge (bin/solfa-bridge), keeps
+// Service.qml — one per shell. It runs the bridge (bin/wax-bridge), keeps
 // the one copy of the state that every bar widget and the panel draw from,
-// and holds the actions they call. Everything about the hidden engine and
-// its window lives in the bridge; this side is the UI's model.
+// and holds the actions they call. Playback and API access live in the
+// bridge; this side is the UI model.
 Item {
   id: root
 
@@ -56,7 +56,7 @@ Item {
   }
   Timer { id: pendingSettingsTimer; interval: 5000; onTriggered: root.pendingSettings = ({}) }
 
-  readonly property string pluginId: "io.github.sirallap.solfa"
+  readonly property string pluginId: "local.wax.player"
   readonly property string pluginDir: decodeURIComponent(Qt.resolvedUrl(".").toString().replace(/^file:\/\//, "")).replace(/\/$/, "")
   readonly property string runtimeDir: (Quickshell.env("XDG_RUNTIME_DIR") || ("/run/user/" + Quickshell.env("UID"))) + "/" + pluginId
   readonly property string socketPath: runtimeDir + "/bridge.sock"
@@ -69,27 +69,26 @@ Item {
   property int queueVersion: 0
   property string lastError: ""
 
+  property bool quitRequested: false
+  property bool startWhenConnected: false
+  readonly property bool poweredOff: quitRequested || !!root.setting("poweredOff", false)
+  onPoweredOffChanged: if (poweredOff) bridgeRetryTimer.stop()
   readonly property bool bridgeUp: sock.connected
-  readonly property bool ready: bridgeUp && engine.status === "ready" && (!account.host || account.host === "music.youtube.com")
+  readonly property bool ready: !poweredOff && bridgeUp && engine.status === "ready" && signedIn
   readonly property bool signedIn: !!account.signedIn
-  // Premium is only ever true when signed in and the page said so.
-  readonly property bool premium: signedIn && account.premium === true
-  // The sign-in window is open: YouTube Music is closed until it is done.
-  readonly property bool signingIn: bridgeUp && !!engine.signingIn
-  // A sign-in window closed and the page came back signed out: said once,
-  // in the panel or as a notification, never a silent close.
-  readonly property string signinError: bridgeUp ? (engine.signinError || "") : ""
-  onSigninErrorChanged: if (signinError) root.report(signinError)
-  readonly property bool gated: signingIn || (bridgeUp && engine.status === "ready" && !!account.host && account.host !== "music.youtube.com")
-  readonly property string engineLine: bridgeUp ? Model.engineLine(engine, account) : Model.engineLineWhileDown(root.manifestVersion)
+  readonly property bool premium: false
+  readonly property bool signingIn: false
+  readonly property string signinError: ""
+  readonly property bool gated: bridgeUp && !signedIn
+  readonly property string engineLine: poweredOff ? "Wax is off" : bridgeUp ? Model.engineLine(engine, account) : Model.engineLineWhileDown(root.manifestVersion)
   // Closed: the engine is not running and nothing will start it by itself
   // (the user closed it, or it kept crashing). Nothing plays; play, the
   // power button or a click on the bar starts it again.
-  readonly property bool closed: bridgeUp && engine.status === "stopped" && !engine.wantRunning && !signingIn
-  readonly property bool hasTrack: ready && !!(player && player.videoId)
+  readonly property bool closed: poweredOff || bridgeUp && engine.status === "stopped" && !engine.wantRunning && !signingIn
+  readonly property bool hasTrack: ready && !!(player && player.trackId)
   readonly property bool isPlaying: hasTrack && !!player.playing
   readonly property bool isAd: hasTrack && !!player.ad
-  readonly property string videoId: hasTrack ? player.videoId : ""
+  readonly property string trackId: hasTrack ? player.trackId : ""
   readonly property string title: hasTrack ? (player.title || "") : ""
   readonly property string artist: hasTrack ? Model.artistsText(player.artists) : ""
   readonly property string album: hasTrack && player.album ? (player.album.name || "") : ""
@@ -126,19 +125,14 @@ Item {
   // The panel sets this so a track toast does not repeat what is on screen.
   property bool panelOpen: false
 
-  signal trackChanged(string videoId)
+  signal trackChanged(string trackId)
   signal queueChanged()
+  signal libraryChanged()
 
   // ------------------------------------------------------------------ bridge lifetime
   //
-  // The bridge is no longer a Quickshell child process: a dead DevTools TCP
-  // port is not the only thing --remote-debugging-pipe removes, so does
-  // "the shell runs the browser's parent". The bridge now runs as a
-  // transient `systemd --user` unit, started detached (fire and forget: no
-  // live Process wired to its stdout or lifetime), so it — and the engine,
-  // its own child — survive a shell restart on their own. This side only
-  // ever talks to it over the socket; Socket's own retry loop below
-  // reconnects after either one restarts.
+  // A detached systemd user service keeps playback alive across shell restarts.
+  // The private socket reconnects, and the bridge exits after its UI lease expires.
 
   readonly property string manifestVersion: {
     try { return JSON.parse(manifestFile.text()).version || "" } catch (e) { return "" }
@@ -150,13 +144,8 @@ Item {
     printErrors: false
   }
 
-  // The bridge reads `autostart` and `browser` once, from its environment
-  // (a launch key it echoes back in `hello`): so it starts when this
-  // service has its settings (the bar widget pushes them just after the
-  // shell creates the service), or after 2 s with no widget at all, and it
-  // is asked to quit and restart when one of those two settings changes
-  // (or the plugin itself was updated under it).
-  readonly property string bridgeEnvKey: String(root.setting("autostart", true)) + "|" + root.setting("browser", "")
+  // Restart when startup settings or the installed version change.
+  readonly property string bridgeEnvKey: String(root.setting("autostart", true))
   property string runningEnvKey: ""
   property string runningVersion: ""
   property bool bridgeUnitStarted: false
@@ -171,28 +160,22 @@ Item {
 
   function envForBridge() {
     var vars = {
-      SOLFA_LAUNCH_KEY: root.bridgeEnvKey,
+      WAX_LAUNCH_KEY: root.bridgeEnvKey,
       // The shell's own idle lease: no UI connection (this Service) for
       // this long closes the bridge, the engine and the socket — off (0)
       // for anything that starts the bridge by hand (tests included).
-      SOLFA_ORPHAN_SECONDS: "30",
-      // Advanced > memory: read once when the bridge starts (the help text
-      // says so); changing them does not itself restart the bridge.
-      SOLFA_RECYCLE_HEAP_MB: String(Model.recycleHeapMbFor(root.setting("recycleHeapMb", 400))),
-      SOLFA_RECYCLE_HOURS: String(Model.recycleHoursFor(root.setting("recycleHours", 12))),
-      // Playback > "When Solfa starts" / "Volume at start": the bridge
+      WAX_ORPHAN_SECONDS: "30",
+      // Playback > "When Wax starts" / "Volume at start": the bridge
       // applies them itself, once, to an engine it launches as a start of
-      // Solfa (never to one already playing, a restart or a recycle). Given
+      // Wax (never to one already playing, a restart). Given
       // here so it has them before the engine is up; start.set keeps them
       // current afterwards.
-      SOLFA_START_PAUSED: root.setting("startPaused", false) ? "1" : "0"
+      WAX_START_PAUSED: root.setting("startPaused", false) ? "1" : "0"
     }
-    var browser = root.setting("browser", "")
-    if (browser !== "") vars.SOLFA_BROWSER = browser
-    if (!root.setting("autostart", true)) vars.SOLFA_NO_LAUNCH = "1"
+    if (!root.setting("autostart", true)) vars.WAX_NO_LAUNCH = "1"
     var vol = root.startVolumeArg()
-    if (vol !== null) vars.SOLFA_START_VOLUME = String(vol)
-    // Everything else the engine's Chromium (and hyprctl) needs to reach
+    if (vol !== null) vars.WAX_START_VOLUME = String(vol)
+    // Everything else the bridge and desktop helpers needs to reach
     // this session, passed through as it is now (never PATH, never "").
     var passthrough = ["WAYLAND_DISPLAY", "XDG_RUNTIME_DIR", "HYPRLAND_INSTANCE_SIGNATURE",
       "DBUS_SESSION_BUS_ADDRESS", "XDG_CURRENT_DESKTOP", "LANG"]
@@ -207,11 +190,11 @@ Item {
     var vars = root.envForBridge()
     // L1: systemd-run (261+) expands ${VAR} in command arguments by default;
     // a pluginDir containing "$" would otherwise be rewritten.
-    var argv = ["/usr/bin/systemd-run", "--user", "--unit=io.github.sirallap.solfa-bridge", "--collect", "--quiet",
+    var argv = ["/usr/bin/systemd-run", "--user", "--unit=local.wax.player-bridge", "--collect", "--quiet",
       "--expand-environment=no"]
     for (var k in vars) argv.push("--setenv=" + k + "=" + vars[k])
     argv.push("--")
-    argv.push("/usr/bin/python3", root.pluginDir + "/bin/solfa-bridge")
+    argv.push("/usr/bin/python3", root.pluginDir + "/bin/wax-bridge")
     // Fire and forget: "unit already exists" (a bridge is already running)
     // is not an error here, it is the common case — the socket below is
     // what actually says whether one answers.
@@ -219,7 +202,7 @@ Item {
   }
 
   function startBridge() {
-    if (root.bridgeUnitStarted) return
+    if (root.poweredOff || !root.settingsLoaded || root.bridgeUnitStarted) return
     root.bridgeUnitStarted = true
     root.runningEnvKey = root.bridgeEnvKey
     root.startBridgeUnit()
@@ -231,6 +214,7 @@ Item {
   // one this key/version wants: close it (engine included) and start a
   // fresh unit, rather than restarting a Quickshell child.
   function quitAndRestartBridge() {
+    if (root.poweredOff) return
     if (!root.bridgeUnitStarted && !sock.connected) { root.startBridge(); return }
     root.bridgeUnitStarted = false
     root.restartDelay = 300
@@ -242,6 +226,7 @@ Item {
   }
 
   function maybeRestartBridge() {
+    if (root.poweredOff) return
     if (root.runningEnvKey !== "" && root.runningEnvKey !== root.bridgeEnvKey) {
       root.quitAndRestartBridge()
     } else {
@@ -280,9 +265,12 @@ Item {
   BridgeSocket {
     id: sock
     path: root.socketPath
+    active: !root.poweredOff
     onRead: data => root.onLine(data)
     onConnectedChanged: {
-      if (sock.connected) {
+      if (sock.connected && root.poweredOff) {
+        root.request("app.quit", {})
+      } else if (sock.connected) {
         root.restartDelay = 1000
         root.bridgeUnitStarted = true  // something answered: no unit to start
         root.request("hello", {}, function (r) { if (r.ok) root.applyHello(r.data) })
@@ -295,7 +283,7 @@ Item {
         // stop from outside us) — nothing else will restart it. Back off
         // like the "never connected" path does, then try again: never a
         // tight loop, never silence forever.
-        if (root.bridgeUnitStarted) {
+        if (root.bridgeUnitStarted && !root.poweredOff) {
           root.bridgeUnitStarted = false
           root.restartDelay = Model.nextRetryDelay(root.restartDelay)
           bridgeRetryTimer.interval = Model.retryTimerInterval(root.restartDelay)
@@ -343,7 +331,7 @@ Item {
     // closed it stays unsaid (report() covers the user's own actions).
     if (!reply.ok && reply.error && !entry.cb && root.panelOpen) root.lastError = Model.errorText(reply.error)
     if (entry.cb) {
-      try { entry.cb(reply) } catch (e) { console.warn("[solfa] callback: " + e) }
+      try { entry.cb(reply) } catch (e) { console.warn("[wax] callback: " + e) }
     }
   }
 
@@ -357,9 +345,11 @@ Item {
     try { msg = JSON.parse(line) } catch (e) { return }
     if (msg.id !== undefined && msg.id !== null) { root.finish(msg.id, msg); return }
     switch (msg.event) {
+      case "quit": root.rememberQuit(); break
       case "player": root.applyPlayer(msg.data || {}); break
       case "engine": root.engine = msg.data || root.engine; break
       case "account": root.account = msg.data || root.account; break
+      case "library": root.libraryChanged(); break
       case "queue":
         root.queueVersion = (msg.data && msg.data.version) || 0
         root.queueChanged()
@@ -368,10 +358,14 @@ Item {
   }
 
   function applyHello(data) {
+    if (root.startWhenConnected && !root.poweredOff) {
+      root.startWhenConnected = false
+      root.request("engine.start", {})
+    }
     root.engine = data.engine || root.engine
     root.account = data.account || root.account
     root.queueVersion = data.queueVersion || 0
-    root.solfaVersion = data.version || root.solfaVersion
+    root.waxVersion = data.version || root.waxVersion
     root.applyPlayer(data.player || {})
     root.runningEnvKey = data.launchKey !== undefined ? data.launchKey : root.runningEnvKey
     root.runningVersion = data.version || root.runningVersion
@@ -387,7 +381,7 @@ Item {
   }
 
   // The bridge's own version, from `hello` (About).
-  property string solfaVersion: ""
+  property string waxVersion: ""
 
   property string lastVideo: ""
   property bool firstPlayer: true
@@ -396,19 +390,20 @@ Item {
     var before = root.lastVideo
     root.player = p
     root.now = Date.now()
-    if (p.videoId && p.videoId !== before) {
-      root.lastVideo = p.videoId
-      root.trackChanged(p.videoId)
-      if (!root.firstPlayer) { root.pendingToast = p.videoId; toastTimer.restart() }
-    } else if (root.pendingToast !== "" && root.pendingToast === p.videoId && !toastTimer.running) {
+    if (!p.trackId && before) { root.lastVideo = ""; root.trackChanged(""); root.pendingToast = "" }
+    if (p.trackId && p.trackId !== before) {
+      root.lastVideo = p.trackId
+      root.trackChanged(p.trackId)
+      if (!root.firstPlayer) { root.pendingToast = p.trackId; toastTimer.restart() }
+    } else if (root.pendingToast !== "" && root.pendingToast === p.trackId && !toastTimer.running) {
       // The title or the end of an advert came with a later push.
       root.toast()
     }
     root.firstPlayer = false
   }
 
-  // Playback > "When Solfa starts" / "Volume at start" live in the bridge
-  // (see SOLFA_START_* above): it knows whether an engine is a new start.
+  // Playback > "When Wax starts" / "Volume at start" live in the bridge
+  // (see WAX_START_* above): it knows whether an engine is a new start.
   function startVolumeArg() { return Model.startVolumeFor(root.setting("startVolume", "last")) }
   function sendStart() {
     if (sock.connected) root.request("start.set", { paused: !!root.setting("startPaused", false), volume: root.startVolumeArg() })
@@ -423,7 +418,7 @@ Item {
   function report(code) {
     var text = Model.errorText(code)
     if (root.panelOpen) { root.lastError = text; return }
-    Quickshell.execDetached(["/usr/bin/notify-send", "--app-name=Solfa", "--urgency=low", "--expire-time=4000", "--", "Solfa", text])
+    Quickshell.execDetached(["/usr/bin/notify-send", "--app-name=Wax Player", "--urgency=low", "--expire-time=4000", "--", "Wax", text])
   }
   function reportFailure(r) { if (r && !r.ok && r.error !== "bridge-down") root.report(r.error) }
 
@@ -441,7 +436,7 @@ Item {
   function seek(seconds) {
     if (!root.hasTrack) return
     var s = Math.max(0, Math.min(root.duration || seconds, seconds))
-    // Show it at once; the page confirms with a push.
+    // Show it at once; the player confirms with a push.
     var p = Object.assign({}, root.player, { position: s, at: Date.now() })
     root.player = p
     root.request("seek", { seconds: s })
@@ -477,18 +472,13 @@ Item {
   function toggleLike() {
     if (!root.hasTrack) return
     if (!root.signedIn) { root.report("signin-required"); return }
-    root.request("like", { videoId: root.videoId, status: Model.nextLike(root.like) }, root.reportFailure)
+    root.request("like", { trackId: root.trackId, status: Model.nextLike(root.like) }, root.reportFailure)
   }
-  function dislike() {
-    if (!root.hasTrack || !root.signedIn) return
-    root.request("like", { videoId: root.videoId, status: root.like === "DISLIKE" ? "INDIFFERENT" : "DISLIKE" })
-  }
-
   // Play whatever a row is: a track, an album, a playlist, an artist's shuffle.
   function playItem(item, cb) {
     if (!item) return
-    if (item.videoId) {
-      var a = { videoId: item.videoId }
+    if (item.trackId) {
+      var a = { trackId: item.trackId }
       if (item.playlistId) a.playlistId = item.playlistId
       root.request("play", a, cb)
     } else if (item.playlistId) {
@@ -497,8 +487,8 @@ Item {
       root.request("browse", { id: item.browseId }, function (r) {
         if (r.ok && r.data && (r.data.shuffle || r.data.radio)) {
           var s = r.data.shuffle || r.data.radio
-          var args = { playlistId: s.playlistId }
-          if (s.videoId) args.videoId = s.videoId
+          var args = { playlistId: s.playlistId, shuffle: true }
+          if (s.trackId) args.trackId = s.trackId
           if (s.params) args.params = s.params
           root.request("play", args, cb)
         } else if (cb) cb({ ok: false, error: r.error || "not-found" })
@@ -507,44 +497,59 @@ Item {
   }
 
   function radioFor(item) {
-    if (!item || !item.videoId) return
+    if (!item || !item.trackId) return
     if (item.radio && item.radio.playlistId) {
-      var a = { videoId: item.videoId, playlistId: item.radio.playlistId }
+      var a = { trackId: item.trackId, playlistId: item.radio.playlistId }
       if (item.radio.params) a.params = item.radio.params
       root.request("radio", a)
     } else {
-      root.request("radio", { videoId: item.videoId })
+      root.request("radio", { trackId: item.trackId })
     }
   }
 
   function enqueue(item, next, cb) {
-    if (!item || !item.videoId) { if (cb) cb({ ok: false, error: "not-found" }); return }
-    root.request("queue.add", { videoIds: [item.videoId], next: !!next }, cb)
+    if (!item || !item.trackId) { if (cb) cb({ ok: false, error: "not-found" }); return }
+    root.request("queue.add", { trackIds: [item.trackId], next: !!next }, cb)
   }
 
   // ------------------------------------------------------------------ engine and window
 
-  function startEngine() { root.request("engine.start", {}) }
-  function restartEngine() { root.request("engine.restart", {}) }
-  function stopEngine() { root.request("engine.stop", {}) }
-  function toggleEngine() { if (root.closed) root.startEngine(); else root.stopEngine() }
-  function signIn() { root.request("signin.begin", {}) }
-  // "Use my browser's sign-in" was removed before the marketplace release;
-  // importedSession stays read-only, for a profile from before this build.
-  readonly property bool importedSession: bridgeUp && !!engine.importedSession
-  function showWindow() { root.request("window.show", {}) }
-  // Google's cookie question, answered with the user's choice from the panel.
-  function answerCookies(accept) {
-    root.request("consent.answer", { accept: accept }, function (r) {
-      if (!r.ok) root.lastError = r.error === "no-consent" ? "Google's cookie question was not found; open the window instead" : Model.errorText(r.error)
-    })
+  function startEngine() {
+    if (!root.poweredOff && sock.connected) { root.request("engine.start", {}); return }
+    root.startWhenConnected = true
+    root.quitRequested = false
+    root.saveSetting("poweredOff", false)
+    if (!sock.connected) { root.bridgeUnitStarted = false; root.startBridge() }
   }
-  function hideWindow() { root.request("window.hide", {}) }
+  function restartEngine() { root.request("engine.restart", {}) }
+  function rememberQuit() {
+    root.quitRequested = true
+    root.startWhenConnected = false
+    root.saveSetting("poweredOff", true)
+    bridgeRetryTimer.stop()
+  }
+  function stopBridgeUnit() {
+    Quickshell.execDetached(["/usr/bin/systemctl", "--user", "stop", "local.wax.player-bridge.service"])
+  }
+  function stopEngine() {
+    root.rememberQuit()
+    if (sock.connected) root.request("app.quit", {})
+    else root.stopBridgeUnit()
+  }
+  function toggleEngine() { if (root.closed) root.startEngine(); else root.stopEngine() }
+  signal connectionRequested()
+  function signIn() { root.connectionRequested() }
+  function connectServer(url, username, password, cb) {
+    root.request("connection.save", { url: url, username: username, password: password }, cb, 60000)
+  }
+  readonly property bool importedSession: false
+  function showWindow() { if (root.account.url) Qt.openUrlExternally(root.account.url) }
+  function hideWindow() {}
 
   // ------------------------------------------------------------------ Settings: Sound (EQ / loudness)
 
-  // Assembled here (not in agent.js): off means flat/bypass is what actually
-  // reaches the page, whatever preset or custom bands are stored — they are
+  // Assembled here (not in the backend): off means flat/bypass is what actually
+  // reaches the player, whatever preset or custom bands are stored — they are
   // untouched, so turning it back on returns exactly what was there.
   function eqPayload() {
     return Model.eqPayload(
@@ -556,7 +561,7 @@ Item {
   }
   // Sent once the bridge is up (it may have just (re)started, forgetting
   // what it knew) and again whenever a setting changes; the bridge itself
-  // resends the last one it was given after every page load and recycle.
+  // retains it for the next player start.
   function sendEq() { root.request("eq.set", root.eqPayload()) }
 
   // ------------------------------------------------------------------ Settings: Account
@@ -568,30 +573,20 @@ Item {
       if (cb) cb(r)
     })
   }
-  // signout answers once Google's logout has landed back on the app
-  // (up to ~20 s), so a sign-in after it never cuts the redirects short.
   function accountSignOut(cb) {
     root.request("signout", {}, function (r) {
       if (r.ok) root.accountDetails = { name: "", email: "", avatar: "" }
       if (cb) cb(r)
     }, 30000)
   }
-  // Switch: sign out, then Google's account chooser (not a silent sign-in
-  // back into the same account).
-  function accountSwitch(cb) {
-    root.accountSignOut(function (r) {
-      if (!r.ok) { if (cb) cb(r); return }
-      root.request("signin.begin", { chooser: true }, cb)
-    })
-  }
+  function accountSwitch(cb) { root.connectionRequested(); if (cb) cb({ ok: true }) }
 
   // ------------------------------------------------------------------ Settings: Advanced
 
   function engineVersion(cb) { root.request("engine.version", {}, cb) }
   function clearCache(cb) { root.request("cache.clear", {}, cb) }
-  // confirm: the view's two-step confirm, which the bridge requires. It
-  // waits for the engine to close (up to ~20 s), then for the delete.
-  function eraseProfile(cb) { root.request("profile.erase", { confirm: true }, cb, 120000) }
+  // Forget this client's saved connection and queue.
+  function eraseProfile(cb) { root.accountSignOut(cb) }
 
   // ------------------------------------------------------------------ Settings: Playback sleep timer (not persisted)
 
@@ -609,7 +604,7 @@ Item {
     fadeTimer.stop()
     pauseCheck.stop()
     root.sleepFadeVolume = -1
-    root.sleepArmedVideo = mode === "end" ? root.videoId : ""
+    root.sleepArmedVideo = mode === "end" ? root.trackId : ""
     var delay = Model.sleepFadeDelayMs(mode)
     if (delay >= 0) { sleepCountdown.interval = Math.max(1, delay); sleepCountdown.start() }
   }
@@ -682,7 +677,7 @@ Item {
   // already begun. If the armed song is left before then (skipped, or the
   // sleep mode changed), nothing fires for whatever plays after it.
   function checkSleepEnd() {
-    if (Model.shouldStartSleepFade(root.sleepMode, root.sleepArmedVideo, root.videoId, root.duration, root.position, root.sleepFadeVolume >= 0))
+    if (Model.shouldStartSleepFade(root.sleepMode, root.sleepArmedVideo, root.trackId, root.duration, root.position, root.sleepFadeVolume >= 0))
       root.startSleepFade()
   }
 
@@ -703,18 +698,18 @@ Item {
   property string pendingToast: ""
 
   function toast() {
-    if (root.pendingToast === "" || root.pendingToast !== root.videoId) return
+    if (root.pendingToast === "" || root.pendingToast !== root.trackId) return
     if (!root.setting("notify", true) || root.panelOpen) { root.pendingToast = ""; return }
     if (root.isAd || !root.title) return
     root.pendingToast = ""
     var text = Model.notifyText(root.player)
     if (!text) return
-    var vid = root.videoId
-    root.request("art", { videoId: vid, url: root.thumb }, function (r) {
-      if (vid !== root.videoId) return
+    var vid = root.trackId
+    root.request("art", { coverId: root.player.coverId || "" }, function (r) {
+      if (vid !== root.trackId) return
       var icon = r.ok && r.data ? r.data.path : "audio-x-generic"
       var esc = function (s) { return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;") }
-      var argv = ["/usr/bin/notify-send", "--app-name=Solfa", "--icon=" + icon, "--print-id", "--urgency=low",
+      var argv = ["/usr/bin/notify-send", "--app-name=Wax Player", "--icon=" + icon, "--print-id", "--urgency=low",
         "--hint=string:x-canonical-private-synchronous:" + root.pluginId]
       if (root.toastId > 0) argv.push("--replace-id=" + root.toastId)
       argv.push("--", esc(text.summary), esc(text.body))
@@ -735,7 +730,7 @@ Item {
 
   // ------------------------------------------------------------------ global keys
 
-  // Solfa's own shortcuts, registered at runtime and only where the key is
+  // Wax's own shortcuts, registered at runtime and only where the key is
   // free; a Hyprland config reload wipes them, so they come back after one.
   // M3: the last bare program name run through Hyprland's exec (a PATH
   // lookup, sh -c). Resolved once, with an absolute fallback so a session
@@ -750,7 +745,7 @@ Item {
   onWantKeysChanged: root.syncKeys()
 
   // The plugin can be removed or disabled without warning (Omarchy just
-  // destroys this Item): unbind Solfa's own keys so they are not left
+  // destroys this Item): unbind Wax's own keys so they are not left
   // dangling in Hyprland's config. This is the only cleanup done here — the
   // engine and the bridge itself outlive a shell restart on purpose; the
   // bridge's own orphan lease is what closes them once nothing reconnects.
@@ -810,11 +805,12 @@ Item {
   // ------------------------------------------------------------------ IPC
 
   IpcHandler {
-    target: "io.github.sirallap.solfa"
+    target: "local.wax.player"
 
     function toggle(): void { if (root.shell) root.shell.toggle(root.pluginId, "{}") }
     function open(): void { if (root.shell) root.shell.summon(root.pluginId, "{}") }
     function close(): void { if (root.shell) root.shell.hide(root.pluginId) }
+    function quit(): void { root.stopEngine() }
     function playPause(): void { root.togglePlaying() }
     function next(): void { root.next() }
     function previous(): void { root.previous() }

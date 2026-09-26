@@ -2,8 +2,8 @@ import QtQuick
 import qs.Ui
 import qs.Commons
 
-// Solfa is off (the engine closed on purpose, or after it kept crashing):
-// nothing below would work, so under the header ("Solfa is off") the panel
+// Wax is off (the engine closed on purpose, or after it kept crashing):
+// nothing below would work, so under the header ("Wax is off") the panel
 // shows only the way back on.
 Column {
   id: card

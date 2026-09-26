@@ -5,10 +5,10 @@ Runs tests/qml/SocketScene.qml (the real lib/BridgeSocket.qml) in a private
 Quickshell, offscreen, against a fake bridge socket that is missing at
 first, or that goes away and comes back. Quickshell's Socket never connects
 again after one "server not found", which once left the panel on "Starting
-Solfa" for good after a bridge restart. Skips when Quickshell or a desktop
+Wax" for good after a bridge restart. Skips when Quickshell or a desktop
 session is not available.
 """
-import testenv  # noqa: F401 - isolates HOME/XDG_*/SOLFA_* before anything else runs
+import testenv  # noqa: F401 - isolates HOME/XDG_*/WAX_* before anything else runs
 import os
 import shutil
 import socket
@@ -60,10 +60,10 @@ class FakeBridge:
 
 
 def run_scene(windows, scene_ms, linger=0.0):
-    workdir = tempfile.mkdtemp(prefix="solfa-sock-")
+    workdir = tempfile.mkdtemp(prefix="wax-sock-")
     # AF_UNIX paths are short (108 bytes): the socket lives in its own dir
     # under /tmp, never in the (long) scratch dir.
-    sockdir = tempfile.mkdtemp(prefix="solfa-s-", dir="/tmp")
+    sockdir = tempfile.mkdtemp(prefix="wax-s-", dir="/tmp")
     try:
         cfg = os.path.join(workdir, "scene")
         os.mkdir(cfg)
@@ -72,7 +72,7 @@ def run_scene(windows, scene_ms, linger=0.0):
         path = os.path.join(sockdir, "bridge.sock")
         bridge = FakeBridge(path, windows, linger)
         env = dict(os.environ, QT_QPA_PLATFORM="offscreen", XDG_RUNTIME_DIR=workdir,
-                   SOLFA_SOCKET_PATH=path, SOLFA_SCENE_MS=str(scene_ms))
+                   WAX_SOCKET_PATH=path, WAX_SCENE_MS=str(scene_ms))
         env.pop("DISPLAY", None)
         runtime = os.environ.get("XDG_RUNTIME_DIR", "")
         display = os.environ.get("WAYLAND_DISPLAY", "")

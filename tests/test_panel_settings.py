@@ -8,7 +8,7 @@ tests/qml/stub/KeyboardPanel.qml, a plain card: nothing is mapped on the
 desktop and no keyboard is grabbed. Skips when Quickshell, the Omarchy
 shell or a desktop session is missing.
 """
-import testenv  # noqa: F401 - isolates HOME/XDG_*/SOLFA_* before anything else runs
+import testenv  # noqa: F401 - isolates HOME/XDG_*/WAX_* before anything else runs
 import json
 import os
 import re
@@ -34,13 +34,13 @@ def render(workdir, scale="1", out=None):
         os.symlink(src, os.path.join(ui, name))
     for name, target in (("Commons", os.path.join(SHELL_DIR, "Commons")),
                          ("views", os.path.join(ROOT, "views")), ("lib", os.path.join(ROOT, "lib")),
-                         ("SolfaPanel.qml", os.path.join(ROOT, "Panel.qml")),
+                         ("WaxPanel.qml", os.path.join(ROOT, "Panel.qml")),
                          ("shell.qml", os.path.join(HERE, "qml", "PanelScene.qml"))):
         os.symlink(target, os.path.join(cfg, name))
     env = dict(os.environ, QT_QPA_PLATFORM="offscreen", QT_SCALE_FACTOR=scale, XDG_RUNTIME_DIR=workdir)
-    env.pop("SOLFA_SCENE_OUT", None)
+    env.pop("WAX_SCENE_OUT", None)
     if out:
-        env["SOLFA_SCENE_OUT"] = out
+        env["WAX_SCENE_OUT"] = out
     runtime = os.environ.get("XDG_RUNTIME_DIR", "")
     display = os.environ.get("WAYLAND_DISPLAY", "")
     if runtime and display and not os.path.isabs(display):
@@ -56,8 +56,8 @@ def render(workdir, scale="1", out=None):
 class PanelSettings(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.workdir = tempfile.mkdtemp(prefix="solfa-panel-")
-        cls.found = render(cls.workdir, os.environ.get("SOLFA_SCENE_SCALE", "1"), os.environ.get("SOLFA_PANEL_OUT"))
+        cls.workdir = tempfile.mkdtemp(prefix="wax-panel-")
+        cls.found = render(cls.workdir, os.environ.get("WAX_SCENE_SCALE", "1"), os.environ.get("WAX_PANEL_OUT"))
         cls.state = cls.found["STATE"]
 
     @classmethod
@@ -88,7 +88,7 @@ class PanelSettings(unittest.TestCase):
         self.assertEqual({k: s[k] for k in ("offCard", "turnOn", "tabs", "hero")},
                          {"offCard": True, "turnOn": True, "tabs": False, "hero": True})
 
-    def test_enter_turns_solfa_on_when_off(self):
+    def test_enter_turns_wax_on_when_off(self):
         self.assertEqual(self.state["off"]["startsAfterEnter"], 1)
 
     def test_keys_do_nothing_while_signing_in(self):

@@ -1,0 +1,9 @@
+#!/usr/bin/python3
+"""Run Wax's Navidrome bridge from an installed plugin or checkout."""
+import pathlib
+import sys
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
+from backend.bridge import main
+
+if __name__ == "__main__":
+    main()

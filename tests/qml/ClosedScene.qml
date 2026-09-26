@@ -5,10 +5,10 @@ import qs.Commons
 import qs.Ui
 import "views" as Views
 
-// Solfa running and closed, rendered once offscreen by a private
+// Wax running and closed, rendered once offscreen by a private
 // Quickshell (test_closed.py): the bar pill playing and closed, and the
 // panel's top (song, name, power button) running, with the pointer on the
-// power button, and closed. Saves a picture to $SOLFA_SCENE_OUT and logs
+// power button, and closed. Saves a picture to $WAX_SCENE_OUT and logs
 // what the widgets show as one "STATE {...}" line.
 ShellRoot {
   id: scene
@@ -27,7 +27,7 @@ ShellRoot {
     property string title: hasTrack ? "Northern Lights" : ""
     property string artist: "The Examples"
     property string album: "Placeholder Skies"
-    property string engineLine: closed ? "Solfa is off" : ""
+    property string engineLine: closed ? "Wax is off" : ""
     property string thumb: ""
     property real duration: 214
     property real position: 83
@@ -35,7 +35,7 @@ ShellRoot {
     property string repeatMode: "ALL"
     property int volume: 60
     property bool muted: false
-    property string videoId: hasTrack ? "v1" : ""
+    property string trackId: hasTrack ? "v1" : ""
     property var calls: []
     property var settings: ({})
     property int fastClockUsers: 0
@@ -90,11 +90,11 @@ ShellRoot {
           spacing: 16
           Rectangle {
             width: 280; height: 26; color: Color.bar ? Color.bar.background : "#101014"
-            SolfaBar { id: barRunning; bar: runningBar; anchors.centerIn: parent }
+            WaxBar { id: barRunning; bar: runningBar; anchors.centerIn: parent }
           }
           Rectangle {
             width: 280; height: 26; color: Color.bar ? Color.bar.background : "#101014"
-            SolfaBar { id: barClosed; bar: closedBar; anchors.centerIn: parent }
+            WaxBar { id: barClosed; bar: closedBar; anchors.centerIn: parent }
           }
         }
 
@@ -165,7 +165,7 @@ ShellRoot {
         }))
         tc.mouseClick(btn, btn.width / 2, btn.height / 2)
         stage.grabToImage(function (r) {
-          r.saveToFile(Quickshell.env("SOLFA_SCENE_OUT"))
+          r.saveToFile(Quickshell.env("WAX_SCENE_OUT"))
           console.log("CLICKS " + JSON.stringify({ closed: closedSvc.calls }))
           Qt.quit()
         })

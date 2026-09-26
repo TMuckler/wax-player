@@ -6,7 +6,7 @@ OpenGL (MultiEffect needs a GPU backend), a red picture in a green ring,
 and compares where the red and the green are centred. Skips when the tool
 or an OpenGL context is not available.
 """
-import testenv  # noqa: F401 - isolates HOME/XDG_*/SOLFA_* before anything else runs
+import testenv  # noqa: F401 - isolates HOME/XDG_*/WAX_* before anything else runs
 import os
 import shutil
 import struct
@@ -51,7 +51,8 @@ def pictures(workdir):
 
 
 def read_ppm(path):
-    data = open(path, "rb").read()
+    with open(path, "rb") as image_file:
+        data = image_file.read()
     magic, w, h, _maxval, pixels = data.split(maxsplit=4)
     assert magic == b"P6"
     return int(w), int(h), pixels
@@ -83,7 +84,7 @@ class BarCoverCentred(unittest.TestCase):
     def setUpClass(cls):
         if not os.access(QML, os.X_OK):
             raise unittest.SkipTest("Qt's qml tool is missing")
-        cls.tmp = tempfile.mkdtemp(prefix="solfa-render.")
+        cls.tmp = tempfile.mkdtemp(prefix="wax-render.")
         # The scene imports ../../views: rebuild that layout around a copy.
         root = os.path.dirname(HERE)
         os.makedirs(os.path.join(cls.tmp, "tests", "qml"))

@@ -19,6 +19,7 @@ Item {
   id: root
 
   property var svc: null
+  readonly property bool inputFocused: connectionForm.visible && connectionForm.inputFocused
   property color fg: Color.foreground
   property string family: Style.font.family
 
@@ -141,12 +142,7 @@ Item {
     var svc = root.svc
     if (!svc) return []
     switch (sec) {
-      case "account": return svc.signedIn ? [
-        { act: function () { root.actSwitch() } },
-        { act: function () { root.actSignOut() } }
-      ] : [
-        { act: function () { root.actSignIn() } }
-      ]
+      case "account": return [{ act: function () { connectionForm.connect() } }]
       case "sound": {
         var bandHandlers = []
         for (var i = 0; i < 10; i++) (function (idx) {
@@ -166,8 +162,7 @@ Item {
         { change: function (dir) { svc.nudgeSleepMode(dir) }, act: function () { svc.nudgeSleepMode(1) } },
         { toggle: function () { svc.saveSetting("startPaused", !svc.setting("startPaused", false)) } },
         { change: function (dir) { svc.saveSetting("startVolume", Model.cycleList(["last", "25", "50", "75", "100"], String(svc.setting("startVolume", "last")), dir)) } },
-        { toggle: function () { svc.saveSetting("autostart", !svc.setting("autostart", true)) } },
-        { change: function (dir) { svc.saveSetting("browser", Model.cycleList(["", "/usr/bin/chromium", "/usr/bin/google-chrome-stable", "/usr/bin/brave", "/usr/bin/vivaldi-stable"], svc.setting("browser", ""), dir)) } }
+        { toggle: function () { svc.saveSetting("autostart", !svc.setting("autostart", true)) } }
       ]
       case "bar": return [
         { toggle: function () { svc.saveSetting("barControls", !svc.setting("barControls", true)) } },
@@ -181,8 +176,6 @@ Item {
         { act: function () { root.showAllKeys() } }
       ]
       case "advanced": return [
-        { change: function (dir) { svc.saveSetting("recycleHeapMb", Model.stepNumber(Model.recycleHeapMbFor(svc.setting("recycleHeapMb", 400)), dir * 50, Model.RECYCLE_HEAP_MB_RANGE[0], Model.RECYCLE_HEAP_MB_RANGE[1])) } },
-        { change: function (dir) { svc.saveSetting("recycleHours", Model.stepNumber(Model.recycleHoursFor(svc.setting("recycleHours", 12)), dir, Model.RECYCLE_HOURS_RANGE[0], Model.RECYCLE_HOURS_RANGE[1])) } },
         { act: function () { root.cacheNote = "Clearing…"; svc.clearCache(function (r) { root.cacheNote = r.ok ? "Cleared" : "Could not clear the cache" }) } },
         { act: function () { svc.resetSettings() } },
         { act: function () { root.actErase() } }
@@ -518,115 +511,11 @@ Item {
       height: parent.height
       clip: true
 
-      // ---- Account ----
-      Column {
+      SignInCard {
+        id: connectionForm
         visible: root.section === "account"
         width: parent.width
-        spacing: Style.space(14)
-
-        Row {
-          visible: root.signedIn
-          spacing: Style.space(14)
-
-          // Centred on the row (never on the name column: a taller avatar
-          // would then start above the row and be cut flat by the clip).
-          RoundCover {
-            id: avatar
-            objectName: "accountAvatar"
-            width: Style.space(52)
-            height: width
-            anchors.verticalCenter: parent.verticalCenter
-            source: root.svc && root.svc.accountDetails.avatar ? root.svc.accountDetails.avatar : ""
-            fill: Util.alpha(root.fg, 0.12)
-            foreground: root.fg
-            glyph: root.svc ? root.initialsFor(root.svc.accountDetails.name) : "?"
-            fontFamily: root.family
-          }
-
-          Column {
-            id: nameCol
-            anchors.verticalCenter: parent.verticalCenter
-            spacing: Style.space(2)
-            Text {
-              text: root.svc ? (root.svc.accountDetails.name || "Signed in") : ""
-              textFormat: Text.PlainText
-              color: root.fg
-              font.family: root.family
-              font.pixelSize: Style.font.subtitle
-            }
-            Text {
-              visible: root.svc && root.svc.accountDetails.email !== ""
-              text: root.svc ? root.svc.accountDetails.email : ""
-              textFormat: Text.PlainText
-              color: Util.alpha(root.fg, 0.6)
-              font.family: root.family
-              font.pixelSize: Style.font.caption
-            }
-            Text {
-              objectName: "accountHelp"
-              text: "Signed in to YouTube Music"
-              textFormat: Text.PlainText
-              color: Util.alpha(root.fg, 0.5)
-              font.family: root.family
-              font.pixelSize: Style.font.caption
-            }
-          }
-        }
-        Text {
-          visible: !root.signedIn
-          text: "Signed out"
-          textFormat: Text.PlainText
-          color: root.fg
-          font.family: root.family
-          font.pixelSize: Style.font.subtitle
-        }
-
-        Row {
-          visible: !root.signedIn
-          spacing: Style.space(8)
-          QuietButton {
-            objectName: "accountSignIn"
-            label: "Sign in"
-            row: 0
-          }
-        }
-        Row {
-          visible: root.signedIn
-          spacing: Style.space(8)
-          QuietButton {
-            objectName: "accountSwitch"
-            label: root.switchArmed ? "Press again to switch" : "Switch account"
-            danger: root.switchArmed
-            row: 0
-          }
-          QuietButton {
-            objectName: "accountSignOut"
-            label: root.signOutArmed ? "Press again to sign out" : "Sign out"
-            danger: root.signOutArmed
-            row: 1
-          }
-        }
-        Text {
-          objectName: "accountHelpText"
-          text: root.signedIn && root.svc && root.svc.importedSession
-                ? "Copied from your browser. Signing out here leaves your browser signed in; signing out there signs Solfa out too."
-              : root.signedIn ? "Switching signs you out, then opens Google's account chooser."
-              : "Signing in opens a Google window. It closes when you are in."
-          textFormat: Text.PlainText
-          wrapMode: Text.WordWrap
-          width: parent.width
-          color: Util.alpha(root.fg, 0.5)
-          font.family: root.family
-          font.pixelSize: Style.font.caption
-        }
-        Text {
-          visible: root.accountNote !== ""
-          text: root.accountNote
-          textFormat: Text.PlainText
-          color: Util.alpha(root.fg, 0.6)
-          font.family: root.family
-          font.pixelSize: Style.font.caption
-        }
+        svc: root.svc
       }
 
       // ---- Sound ----
@@ -757,7 +646,7 @@ Item {
         }
         RowShell {
           label: "Even out loudness"
-          help: "A compressor: quiet songs come up, loud ones do not clip"
+          help: "A compressor: reduces differences in loudness"
           row: 13
           MiniToggle { active: root.svc ? !!root.svc.setting("eqLoudness", false) : false }
         }
@@ -776,9 +665,9 @@ Item {
           StepValue { row: 0; value: root.svc ? Model.sleepLabel(root.svc.sleepMode) : "Off" }
         }
         RowShell {
-          label: "When Solfa starts"
+          label: "When Wax starts"
           row: 1
-          StepValue { row: 1; value: root.svc && root.svc.setting("startPaused", false) ? "Resume paused" : "Resume playing" }
+          StepValue { row: 1; value: root.svc && root.svc.setting("startPaused", false) ? "Resume paused" : "Restore last state" }
         }
         RowShell {
           label: "Volume at start"
@@ -790,12 +679,7 @@ Item {
           row: 3
           MiniToggle { active: root.svc ? !!root.svc.setting("autostart", true) : true }
         }
-        RowShell {
-          label: "Browser for the engine"
-          help: "An absolute path to a Chromium-family browser (never a bare command)"
-          row: 4
-          StepValue { row: 4; value: (function () { var b = root.svc ? root.svc.setting("browser", "") : ""; return b !== "" ? b.split("/").pop() : "Auto" })() }
-        }
+
       }
 
       // ---- Bar and alerts ----
@@ -842,18 +726,14 @@ Item {
         width: parent.width
         spacing: Style.space(6)
 
-        RowShell { label: "Refresh the page when memory passes"; help: "Applies on next start"; row: 0
-          StepValue { row: 0; value: Model.recycleHeapMbFor(root.svc ? root.svc.setting("recycleHeapMb", 400) : 400) + " MB" } }
-        RowShell { label: "Refresh at least every"; help: "Applies on next start"; row: 1
-          StepValue { row: 1; value: Model.recycleHoursFor(root.svc ? root.svc.setting("recycleHours", 12) : 12) + " h" } }
-        RowShell { label: "Clear cache"; help: root.cacheNote !== "" ? root.cacheNote : "Keeps you signed in"; row: 2
+        RowShell { label: "Clear cache"; help: root.cacheNote !== "" ? root.cacheNote : "Keeps you signed in"; row: 0
           QuietButton { label: "Clear" } }
-        RowShell { label: "Reset settings"; row: 3
+        RowShell { label: "Reset settings"; row: 1
           QuietButton { label: "Reset" } }
         RowShell {
-          label: "Erase engine data"
-          help: root.eraseArmed ? "Press again to erase. This signs you out." : (root.eraseNote !== "" ? root.eraseNote : "Deletes the profile; signs you out")
-          row: 4
+          label: "Forget connection"
+          help: root.eraseArmed ? "Press again to erase. This signs you out." : (root.eraseNote !== "" ? root.eraseNote : "Removes saved credentials and queue")
+          row: 2
           QuietButton { label: root.eraseArmed ? "Press again" : "Erase"; danger: true }
         }
       }
@@ -864,7 +744,7 @@ Item {
         width: parent.width
         spacing: Style.space(6)
 
-        Text { text: "Solfa " + (root.svc ? (root.svc.solfaVersion || "0.1.0") : "0.1.0"); textFormat: Text.PlainText; color: root.fg; font.family: root.family; font.pixelSize: Style.font.body }
+        Text { text: "Wax Player " + (root.svc ? (root.svc.waxVersion || "0.1.0") : "0.1.0"); textFormat: Text.PlainText; color: root.fg; font.family: root.family; font.pixelSize: Style.font.body }
         Text { text: "Engine: " + root.engineVersionText; textFormat: Text.PlainText; color: Util.alpha(root.fg, 0.6); font.family: root.family; font.pixelSize: Style.font.caption }
       }
     }

@@ -16,11 +16,17 @@ Item {
   readonly property string family: bar ? bar.fontFamily : Style.font.family
 
   property var page: null        // { id, params, title }
+  property int requestGeneration: 0
+  onPageChanged: {
+    requestGeneration++
+    busy = false
+    loadingMore = false
+  }
   property var info: null
   property bool busy: false
   property bool loadingMore: false
   property string error: ""
-  readonly property var rows: !info ? [] : info.tracks ? Model.trackRows(info.tracks) : Model.sectionRows(info.sections, info.kind === "artist" ? 6 : 0)
+  readonly property var rows: !info ? [] : info.tracks ? Model.trackRows(info.tracks) : Model.sectionRows(info.sections, 0)
   property alias cursor: list.cursor
   readonly property var current: cursor >= 0 && cursor < rows.length ? rows[cursor] : null
   readonly property var hints: [["↵", "play or open"], ["e", "play next"], ["esc", "back"]]
@@ -33,15 +39,17 @@ Item {
 
   function open(p) {
     view.page = p
+    var generation = ++view.requestGeneration
+    view.busy = false
+    view.loadingMore = false
     view.info = p.info || null
     view.error = ""
     if (view.info) { list.cursor = Model.firstRow(view.rows); return }
     view.busy = true
-    var want = p.id
     var args = { id: p.id }
     if (p.params) args.params = p.params
     svc.request("browse", args, function (r) {
-      if (!view.page || view.page.id !== want) return
+      if (generation !== view.requestGeneration || !view.page) return
       view.busy = false
       if (!r.ok) { view.error = Model.errorText(r.error); return }
       view.info = r.data
@@ -53,12 +61,14 @@ Item {
   function loadMore() {
     if (!view.info || !view.info.continuation || view.loadingMore) return
     view.loadingMore = true
-    var want = view.page.id
+    var generation = view.requestGeneration
     svc.request("browse", { id: view.page.id, continuation: view.info.continuation }, function (r) {
+      if (generation !== view.requestGeneration || !view.page) return
       view.loadingMore = false
-      if (!view.page || view.page.id !== want || !r.ok) return
+      if (!r.ok) return
       var d = Object.assign({}, view.info)
-      d.tracks = (d.tracks || []).concat(r.data.tracks || [])
+      if (r.data.tracks) d.tracks = (d.tracks || []).concat(r.data.tracks)
+      if (r.data.sections) d.sections = (d.sections || []).concat(r.data.sections)
       d.continuation = r.data.continuation || ""
       view.info = d
       view.page.info = d
@@ -73,15 +83,15 @@ Item {
     if (view.info.kind === "artist") {
       var s = shuffle ? view.info.shuffle : view.info.radio
       if (!s) return
-      var a = { playlistId: s.playlistId }
-      if (s.videoId) a.videoId = s.videoId
+      var a = { playlistId: s.playlistId, shuffle: shuffle }
+      if (s.trackId) a.trackId = s.trackId
       if (s.params) a.params = s.params
       svc.request("play", a)
       return
     }
     if (!view.info.playlistId) return
     var args = { playlistId: view.info.playlistId }
-    if (shuffle) args.params = "wAEB8gECKAE%3D"
+    if (shuffle) args.shuffle = true
     svc.request("play", args)
   }
 
@@ -107,7 +117,7 @@ Item {
       spacing: Style.space(2)
       Text {
         width: parent.width
-        text: view.info && view.info.title ? view.info.title : (view.page ? view.page.title : "")
+        text: view.info && view.info.title ? view.info.title : (view.page ? (view.page.title || "") : "")
         textFormat: Text.PlainText
         elide: Text.ElideRight
         color: view.fg
@@ -136,7 +146,7 @@ Item {
       Button {
         visible: !!view.info && (view.info.kind === "artist" ? !!view.info.radio : !!view.info.playlistId)
         iconText: view.info && view.info.kind === "artist" ? Icons.radio : Icons.play
-        text: view.info && view.info.kind === "artist" ? "Radio" : "Play"
+        text: view.info && view.info.kind === "artist" ? "Play" : "Play"
         fontFamily: view.family
         foreground: view.fg
         bordered: true
@@ -155,6 +165,7 @@ Item {
 
   RowList {
     id: list
+    svc: view.svc
     anchors.top: head.bottom
     anchors.topMargin: Style.space(10)
     anchors.left: parent.left
@@ -162,7 +173,7 @@ Item {
     anchors.bottom: parent.bottom
     bar: view.bar
     rows: view.rows
-    playingId: view.svc ? view.svc.videoId : ""
+    playingId: view.svc ? view.svc.trackId : ""
     actionsFor: function (row) { return view.panel ? view.panel.itemActions(row) : [] }
     emptyText: view.busy ? "Loading" : view.error
     onActivated: function (i) { view.panel.activateRow(view.rows[i], view.contextList()) }

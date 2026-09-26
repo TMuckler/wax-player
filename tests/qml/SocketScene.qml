@@ -7,7 +7,7 @@ import "lib"
 ShellRoot {
   BridgeSocket {
     id: link
-    path: Quickshell.env("SOLFA_SOCKET_PATH")
+    path: Quickshell.env("WAX_SOCKET_PATH")
     onConnectedChanged: {
       console.log("LINK " + (link.connected ? "up" : "down"))
       if (link.connected) { link.write("{\"hello\":1}\n"); link.flush() }
@@ -15,7 +15,7 @@ ShellRoot {
     onRead: data => console.log("LINE " + data)
   }
   Timer {
-    interval: Number(Quickshell.env("SOLFA_SCENE_MS") || "9000")
+    interval: Number(Quickshell.env("WAX_SCENE_MS") || "9000")
     running: true
     onTriggered: Qt.quit()
   }
