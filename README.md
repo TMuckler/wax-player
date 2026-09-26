@@ -1,5 +1,9 @@
 # Wax Player
 
+![Wax Player with a jazz queue featuring Miles Davis, John Coltrane, and Bill Evans](docs/wax-player-promo-jazz.png)
+
+*Promotional mockup; illustrative artwork and sample queue.*
+
 **Wax Player is a Navidrome fork of [Solfa](https://github.com/sirallap/omarchy-solfa),
 SirAllap's YouTube Music player for the Omarchy shell.** It brings your own
 music library into the bar, with a keyboard-friendly panel for browsing,
