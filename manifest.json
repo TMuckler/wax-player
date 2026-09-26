@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "local.wax.player",
   "name": "Wax Player",
-  "version": "2.2.0",
+  "version": "2.2.1",
   "author": "Wax Player contributors (based on Solfa by SirAllap)",
   "license": "MIT",
   "description": "Navidrome music in the Omarchy bar: search, library, queue, lyrics and favorites, with local mpv playback.",

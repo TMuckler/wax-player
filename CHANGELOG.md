@@ -1,5 +1,10 @@
 # Changelog
 
+## 2.2.1 — Close the panel on quit
+
+- Hide the panel when powering off from the button, CLI, or MPRIS.
+- Keep the bar launcher available while mpv and the bridge are stopped.
+
 ## 2.2.0 — Full power-off
 
 - Make the power button, CLI quit, and MPRIS Quit exit both mpv and the bridge.

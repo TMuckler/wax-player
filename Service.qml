@@ -527,6 +527,7 @@ Item {
     root.startWhenConnected = false
     root.saveSetting("poweredOff", true)
     bridgeRetryTimer.stop()
+    if (root.shell) root.shell.hide(root.pluginId)
   }
   function stopBridgeUnit() {
     Quickshell.execDetached(["/usr/bin/systemctl", "--user", "stop", "local.wax.player-bridge.service"])
