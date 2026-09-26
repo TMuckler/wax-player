@@ -101,7 +101,21 @@ omarchy pkg add mpv python-gobject
 
 ## Installation
 
-Clone Wax Player and run the local installer:
+For a fresh installation through Omarchy's plugin manager:
+
+```bash
+omarchy pkg add mpv python-gobject
+omarchy plugin add https://github.com/TMuckler/wax-player.git --enable
+```
+
+The plugin manager clones and validates the repository; it does not install
+system dependencies or run `bin/install-local`. Update a git-managed install
+with `omarchy plugin update local.wax.player`.
+
+### Install from a checkout
+
+For development or migration from the earlier Navidrome fork, clone Wax
+Player and run the local installer:
 
 ```bash
 git clone https://github.com/TMuckler/wax-player.git
@@ -139,6 +153,22 @@ the client authenticate to `/rest/` using Navidrome credentials.
 Connection settings are available under the gear → Account. A blank
 password keeps the saved credentials when the server and username are
 unchanged. Disconnect removes the saved credentials and playback session.
+
+## Removal
+
+Use the power button or `bin/wax quit` to stop Wax before removing it. If you
+also want to forget the saved server connection and queue, use **Settings →
+Account → Disconnect** before quitting.
+
+```bash
+omarchy plugin remove local.wax.player
+```
+
+Removal unloads the plugin and removes its installed files (local, non-git
+installs are backed up by Omarchy). It does not delete your Navidrome library,
+the source checkout, or the separate configuration, session, and artwork
+paths listed below. Credentials and the saved queue remain unless you
+explicitly disconnect.
 
 ## Keys
 
