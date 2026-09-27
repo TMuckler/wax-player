@@ -15,8 +15,8 @@ class MigrationTests(unittest.TestCase):
             config, state = Path(tmp) / "config", Path(tmp) / "state"
             old = config / OLD_ID / "connection.json"
             new = config / NEW_ID / "connection.json"
-            creds = {"url": "http://example.test", "username": "test", "token": "test-token", "salt": "test-salt"}
-            session = {"identity": "http://example.test\0test", "items": []}
+            creds = {"url": "https://example.test", "username": "test", "token": "test-token", "salt": "test-salt"}
+            session = {"identity": "https://example.test\0test", "items": []}
             private_json(old, creds)
             private_json(state / OLD_ID / "session.json", session)
             migrate(config, state)
@@ -29,7 +29,7 @@ class MigrationTests(unittest.TestCase):
             self.assertFalse(new.exists())
 
     def test_corrupt_legacy_connection_is_not_installed(self):
-        for payload in ("{broken", "[]", '{"url":"http://example.test","username":"test"}'):
+        for payload in ("{broken", "[]", '{"url":"https://example.test","username":"test"}'):
             with self.subTest(payload=payload), tempfile.TemporaryDirectory() as tmp:
                 config, state = Path(tmp) / "config", Path(tmp) / "state"
                 source = config / OLD_ID / "connection.json"

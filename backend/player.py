@@ -28,7 +28,7 @@ class Player:
         try:
             self.process = await asyncio.create_subprocess_exec(
                 self.executable, "--no-config", "--no-terminal", "--idle=yes", "--vid=no", "--audio-display=no",
-                "--input-default-bindings=no", "--input-vo-keyboard=no", "--ytdl=no", "--network-timeout=15",
+                "--input-default-bindings=no", "--input-vo-keyboard=no", "--ytdl=no", "--network-timeout=15", "--tls-verify=yes",
                 "--input-ipc-client=fd://" + str(child.fileno()), *self.extra_args,
                 pass_fds=(child.fileno(),), stdout=asyncio.subprocess.DEVNULL, stderr=asyncio.subprocess.DEVNULL)
         except OSError:

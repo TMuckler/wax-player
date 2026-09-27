@@ -24,14 +24,14 @@ class InstallerTests(unittest.TestCase):
             config, state = Path(tmp) / "config", Path(tmp) / "state"
             plugins = config / "omarchy/plugins"
             (plugins / OLD_ID).mkdir(parents=True)
-            creds = credentials("http://example.test", "listener", "test-only")
+            creds = credentials("https://example.test", "listener", "test-only")
             private_json(config / OLD_ID / "connection.json", creds)
             calls = []
             def command(argv, **kwargs):
                 calls.append(argv)
                 if argv[:3] == ["/usr/bin/systemctl", "--user", "stop"]:
                     private_json(state / OLD_ID / "session.json", {
-                        "identity": "http://example.test\0listener", "items": [], "position": 42
+                        "identity": "https://example.test\0listener", "items": [], "position": 42
                     })
                 return subprocess.CompletedProcess(argv, 0)
             env = {"XDG_CONFIG_HOME": str(config), "XDG_STATE_HOME": str(state)}

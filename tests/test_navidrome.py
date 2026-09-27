@@ -176,6 +176,35 @@ class NavidromeTests(unittest.IsolatedAsyncioTestCase):
             with self.subTest(url=url), self.assertRaises(Error): base_url(url)
 
 
+class TransportPolicyTests(unittest.TestCase):
+    def test_https_and_numeric_loopback_are_allowed(self):
+        for url in ("https://music.example.com/navidrome", "https://192.168.1.2:4533",
+                    "http://127.0.0.1:4533/music", "http://127.1.2.3:4533", "http://[::1]:4533"):
+            with self.subTest(url=url):
+                config = credentials(url + "/", "test", "test-only")
+                client = Client(config, "/tmp/wax-unused-cache")
+                for endpoint in ("ping", "stream", "getCoverArt"):
+                    self.assertTrue(client.url(endpoint).startswith(url + "/rest/"))
+
+    def test_remote_http_is_rejected_for_new_and_saved_credentials(self):
+        for host in ("example.com", "192.168.1.2", "10.0.0.2", "172.16.0.2", "169.254.1.2",
+                     "0.0.0.0", "[::]", "[2001:db8::1]", "localhost", "localhost.",
+                     "127.0.0.1.example.com", "127.1", "2130706433", "0x7f000001",
+                     "%31%32%37.0.0.1", "[::ffff:127.0.0.1]", "[::1%25eth0]"):
+            url = "http://" + host + ":4533/music"
+            with self.subTest(url=url):
+                with self.assertRaisesRegex(Error, "https-required"):
+                    credentials(url, "test", "test-only")
+                with self.assertRaisesRegex(Error, "https-required"):
+                    Client(dict(url=url, username="test", salt="salt", token="token"), "/tmp/wax-unused-cache")
+
+    def test_malformed_urls_raise_sanitized_errors(self):
+        for url in ("https://[invalid", "https://example.com:bad", "http://@127.0.0.1",
+                    "https://example.com?token=secret", "https://user:secret@example.com"):
+            with self.subTest(url=url), self.assertRaisesRegex(Error, "bad-server-url"):
+                base_url(url)
+
+
 @unittest.skipUnless(Path("/usr/bin/mpv").exists(), "mpv is required for playback integration tests")
 class PlaybackTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
@@ -211,6 +240,9 @@ class PlaybackTests(unittest.IsolatedAsyncioTestCase):
             finally:
                 runner.cancel()
                 await asyncio.gather(runner, return_exceptions=True)
+
+    async def test_playback_verifies_tls_certificates(self):
+        self.assertTrue(await self.bridge.player.command("get_property", "tls-verify"))
 
     async def test_real_play_pause_seek_volume_and_eq(self):
         await self.bridge.dispatch("play", {"trackId": SONG})

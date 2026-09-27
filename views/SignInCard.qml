@@ -95,7 +95,7 @@ Column {
   }
   Text {
     width: parent.width
-    text: "Use your Navidrome account. Include any server base path in the URL. Use HTTPS for remote connections."
+    text: "Use your Navidrome account. Include any server base path in the URL. HTTPS is required except for numeric loopback addresses on this machine."
     textFormat: Text.PlainText
     wrapMode: Text.WordWrap
     color: Util.alpha(card.fg, 0.65)

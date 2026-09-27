@@ -150,8 +150,13 @@ Solfa plugin is unaffected.
 
 Open the panel and enter your server URL, username, and password. Include
 any reverse-proxy base path, such as `https://music.example.com/navidrome`.
-Use the final URL: the API client rejects redirects. HTTPS is recommended
-for remote servers; HTTP is supported for local networks. Proxies must let
+Use the final URL: the API client rejects redirects. HTTPS is required
+for network servers, including servers on your LAN. HTTP is allowed only
+for numeric loopback addresses, such as `http://127.0.0.1:4533` or
+`http://[::1]:4533`, for a server on this machine or a local tunnel.
+Hostnames (including `localhost`) require HTTPS; use a numeric loopback
+address for local HTTP. Previously saved remote HTTP connections are blocked;
+reconnect using your server's HTTPS URL. Proxies must let
 the client authenticate to `/rest/` using Navidrome credentials.
 
 Connection settings are available under the gear → Account. A blank

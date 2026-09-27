@@ -74,7 +74,9 @@ player startup. There is no server-side queue synchronization.
 
 Credentials use Subsonic salted token authentication. The saved token/salt
 pair is bearer-equivalent; only the user can read its file. The client
-rejects redirects and verifies HTTPS certificates. API calls have bounded
+rejects redirects and verifies HTTPS certificates. Server URLs require HTTPS
+unless the host is a numeric loopback address. This validation applies to
+new credentials and saved connections before any authenticated URL is built. API calls have bounded
 response sizes, concurrency, and timeouts. mpv receives a stream URL only
 through its private socket, never argv. Artwork and public models contain
 no authentication query strings.

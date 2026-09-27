@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- Require HTTPS for network servers; allow HTTP only for numeric loopback addresses.
+- Block saved remote HTTP connections before sending credentials or restoring playback.
+- Enable certificate verification in mpv for HTTPS audio streams.
+
 ## 2.2.1 — Close the panel on quit
 
 - Hide the panel when powering off from the button, CLI, or MPRIS.

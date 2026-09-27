@@ -129,6 +129,7 @@ test("engine words and error words", () => {
   assert.equal(M.engineLine({ status: "signing-in" }, {}), "Connecting to Navidrome")
   assert.equal(M.errorText("engine-signing-in"), "Finish signing in first")
   assert.equal(M.errorText("signin-required"), "Sign in to do that")
+  assert.match(M.errorText("https-required"), /HTTPS is required/)
   assert.match(M.errorText("http-429"), /429/)
   assert.match(M.errorText("engine-starting"), /not ready/)
   assert.match(M.errorText("engine-busy"), /did not close/)

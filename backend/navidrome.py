@@ -1,6 +1,7 @@
 """Navidrome/OpenSubsonic client. No credentials are exposed in UI models."""
 import asyncio
 import hashlib
+import ipaddress
 import json
 import os
 from pathlib import Path
@@ -24,13 +25,23 @@ def text(value, maximum=512):
 
 def base_url(value):
     value = text(value, 2048).strip().rstrip("/")
-    p = urllib.parse.urlsplit(value)
-    if p.scheme not in ("https", "http") or not p.hostname or p.username or p.password or p.query or p.fragment:
-        raise Error("bad-server-url")
     try:
+        p = urllib.parse.urlsplit(value)
+        if p.scheme not in ("https", "http") or not p.hostname or p.username is not None or p.password is not None or p.query or p.fragment:
+            raise Error("bad-server-url")
         p.port
     except ValueError:
         raise Error("bad-server-url") from None
+    if p.scheme == "http":
+        # Numeric loopback only: LAN addresses still cross the network, and
+        # hostnames can resolve somewhere else. Never send tokens to those.
+        try:
+            address = ipaddress.ip_address(p.hostname)
+            loopback = address.is_loopback and (address.version == 4 or address == ipaddress.IPv6Address("::1"))
+        except ValueError:
+            loopback = False
+        if not loopback or "%" in p.hostname:
+            raise Error("https-required")
     return value
 
 

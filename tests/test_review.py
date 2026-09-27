@@ -46,6 +46,34 @@ class ReviewTests(unittest.IsolatedAsyncioTestCase):
         await asyncio.gather(*self.bridge.tasks, return_exceptions=True)
         self.tmp.cleanup()
 
+    async def test_insecure_signin_does_not_send_credentials_or_replace_account(self):
+        api = self.bridge.api
+        before = self.kwargs["config"].read_bytes()
+        with patch("backend.navidrome.Client.request", new_callable=AsyncMock) as request:
+            with self.assertRaisesRegex(Error, "https-required"):
+                await self.bridge.dispatch("connection.save", {
+                    "url": "http://192.168.1.2:4533", "username": "test", "password": "test-only"})
+            request.assert_not_awaited()
+        self.assertIs(self.bridge.api, api)
+        self.assertEqual(self.kwargs["config"].read_bytes(), before)
+        self.assertTrue(self.bridge.playing)
+
+    async def test_saved_insecure_connection_cannot_start_or_restore_playback(self):
+        config = dict(self.config, url="http://example.com/music")
+        private_json(self.kwargs["config"], config)
+        private_json(self.kwargs["state"], {
+            "identity": config["url"] + "\0test", "items": self.bridge.items,
+            "index": 0, "playing": True})
+        with patch("backend.navidrome.Client.request", new_callable=AsyncMock) as request:
+            other = Bridge(**self.kwargs)
+            await other.start()
+            request.assert_not_awaited()
+        self.assertIsNone(other.api)
+        self.assertFalse(other.account["signedIn"])
+        self.assertEqual(other.status, "unconfigured")
+        self.assertEqual(other.items, [])
+        self.assertEqual(other.player.loads, [])
+
     async def test_failed_track_replacement_stops_old_audio_and_publishes_state(self):
         self.bridge.api.song = AsyncMock(return_value={"trackId": "new", "duration": 10})
         self.bridge.player.load = AsyncMock(side_effect=Error("playback-error"))
